@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+CLAUDE.md
+ARCHITECTURE.md
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Model cache (transformers downloads models here)
+.cache/
+models/
+
+# Node modules (for frontend later)
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
