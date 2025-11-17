@@ -1,6 +1,6 @@
 # Pydantic models for request/response validation
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from bson import ObjectId
 
@@ -105,3 +105,160 @@ class SessionUpdatePreferences(BaseModel):
                 "theme": "dark"
             }
         }
+# ==================== Task Models ====================
+
+class TaskProgress(BaseModel):
+      """Progress information for a task."""
+      total_files: int = Field(0, description="Total number of files to process")
+      processed_files: int = Field(0, description="Number of files processed so far")
+      current_step: str = Field("queued", description="Current processing step: queued, fetching, parsing, embedding")
+
+      class Config:
+          json_schema_extra = {
+              "example": {
+                  "total_files": 350,
+                  "processed_files": 200,
+                  "current_step": "parsing"
+              }
+          }
+
+
+class TaskResponse(BaseModel):
+      """Response model for task status."""
+      task_id: str
+      status: str = Field(..., description="Task status: pending, in_progress, completed, failed")
+      progress: TaskProgress
+      error_message: Optional[str] = None
+      created_at: datetime
+      started_at: Optional[datetime] = None
+      completed_at: Optional[datetime] = None
+
+      class Config:
+          json_schema_extra = {
+              "example": {
+                  "task_id": "task-xyz789",
+                  "status": "in_progress",
+                  "progress": {
+                      "total_files": 350,
+                      "processed_files": 200,
+                      "current_step": "parsing"
+                  },
+                  "error_message": None,
+                  "created_at": "2025-01-16T10:00:00Z",
+                  "started_at": "2025-01-16T10:00:05Z",
+                  "completed_at": None
+              }
+          }
+
+
+  # ==================== Repository Models ====================
+
+class RepositoryCreate(BaseModel):
+      """Request model for creating/adding a repository."""
+      github_url: str = Field(..., description="GitHub repository URL (e.g., https://github.com/owner/repo)")
+      session_id: str = Field(..., description="Session ID from localStorage")
+
+      class Config:
+          json_schema_extra = {
+              "example": {
+                  "github_url": "https://github.com/microsoft/vscode",
+                  "session_id": "550e8400-e29b-41d4-a716-446655440000"
+              }
+          }
+
+
+class RepositoryResponse(BaseModel):
+      """Response model for repository data."""
+      repo_id: str
+      session_id: str
+      github_url: str
+      owner: str
+      repo_name: str
+      full_name: str
+
+      # Optional metadata
+      description: Optional[str] = None
+      default_branch: Optional[str] = "main"
+      language: Optional[str] = None
+      stars: Optional[int] = 0
+      forks: Optional[int] = 0
+
+      # Processing status
+      status: str = Field(..., description="Repository processing status")
+      task_id: Optional[str] = None
+      error_message: Optional[str] = None
+
+      # Statistics
+      file_count: int = 0
+      total_size_bytes: int = 0
+      languages_breakdown: Optional[dict] = None
+
+      # Timestamps
+      created_at: datetime
+      updated_at: datetime
+      last_fetched: Optional[datetime] = None
+
+      class Config:
+          json_schema_extra = {
+              "example": {
+                  "repo_id": "repo-abc123",
+                  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+                  "github_url": "https://github.com/microsoft/vscode",
+                  "owner": "microsoft",
+                  "repo_name": "vscode",
+                  "full_name": "microsoft/vscode",
+                  "description": "Visual Studio Code",
+                  "default_branch": "main",
+                  "language": "TypeScript",
+                  "stars": 150000,
+                  "forks": 25000,
+                  "status": "processing",
+                  "task_id": "task-xyz789",
+                  "error_message": None,
+                  "file_count": 450,
+                  "total_size_bytes": 15678900,
+                  "languages_breakdown": {
+                      "TypeScript": 320,
+                      "JavaScript": 80,
+                      "CSS": 30
+                  },
+                  "created_at": "2025-01-16T10:00:00Z",
+                  "updated_at": "2025-01-16T10:05:00Z",
+                  "last_fetched": "2025-01-16T10:05:00Z"
+              }
+          }
+
+
+  # ==================== File Tree Models ====================
+
+class FileTreeNode(BaseModel):
+      """Recursive model for file tree structure."""
+      type: str = Field(..., description="Node type: file or folder")
+      path: Optional[str] = None
+      size: Optional[int] = None
+      language: Optional[str] = None
+      url: Optional[str] = None
+      children: Optional[Dict[str, "FileTreeNode"]] = None
+
+      class Config:
+          json_schema_extra = {
+              "example": {
+                  "type": "folder",
+                  "children": {
+                      "src": {
+                          "type": "folder",
+                          "children": {
+                              "main.py": {
+                                  "type": "file",
+                                  "path": "src/main.py",
+                                  "size": 1234,
+                                  "language": "python"
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+
+  # Rebuild model to resolve forward references (for recursive children field)
+FileTreeNode.model_rebuild()
