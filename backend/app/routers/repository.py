@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from app.controllers.repository import RepositoryController
 from app.models.schemas import RepositoryCreate, RepositoryResponse, TaskResponse
 
@@ -6,9 +6,9 @@ router = APIRouter(prefix="/api/repositories", tags=["Repositories"])
 controller = RepositoryController()
 
 @router.post("/", response_model=dict)
-async def add_repository(request: RepositoryCreate):
-    """Add a new repository and create processing task."""
-    return await controller.add_repository(request)
+async def add_repository(request: RepositoryCreate, background_tasks: BackgroundTasks):
+    """Add a new repository and start background file processing."""
+    return await controller.add_repository(request, background_tasks)
 
 @router.get("/{repo_id}", response_model=RepositoryResponse)
 async def get_repository(repo_id: str):

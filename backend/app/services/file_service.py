@@ -108,19 +108,23 @@ class FileService:
 
     async def update_parsed_data(
           self,
-          file_id: str,
+          repo_id: str,
+          path: str,
           functions: List[Dict],
           classes: List[Dict],
-          imports: List[str]
+          imports: List[str],
+          parse_error: Optional[str] = None
       ) -> bool:
           """
           Update file with AST parsing results.
 
           Args:
-              file_id: File ID
+              repo_id: Repository ID
+              path: File path
               functions: List of function definitions
               classes: List of class definitions
               imports: List of import statements
+              parse_error: Error message if parsing failed
 
           Returns:
               True if update succeeded
@@ -128,17 +132,20 @@ class FileService:
           database = db.get_database()
           collection = database[self.collection_name]
 
+          update_fields = {
+              "functions": functions,
+              "classes": classes,
+              "imports": imports,
+              "parsed": True,
+              "updated_at": datetime.now()
+          }
+
+          if parse_error:
+              update_fields["parse_error"] = parse_error
+
           result = await collection.update_one(
-              {"file_id": file_id},
-              {
-                  "$set": {
-                      "functions": functions,
-                      "classes": classes,
-                      "imports": imports,
-                      "parsed": True,
-                      "updated_at": datetime.now()
-                  }
-              }
+              {"repo_id": repo_id, "path": path},
+              {"$set": update_fields}
           )
           return result.modified_count > 0
 

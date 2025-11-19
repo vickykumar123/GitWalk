@@ -59,18 +59,24 @@ class TaskService:
         )
         return result.modified_count > 0
 
-    async def complete_task(self, task_id:str) -> bool:
+    async def complete_task(self, task_id: str, result: Optional[Dict] = None) -> bool:
         database = db.get_database()
         collection = database[self.collection_name]
-        result = await collection.update_one(
+
+        update_fields = {
+            "status": "completed",
+            "completed_at": datetime.now(),
+            "updated_at": datetime.now()
+        }
+
+        if result:
+            update_fields["result"] = result
+
+        update_result = await collection.update_one(
             {"task_id": task_id},
-            {"$set": {
-                "status":"completed",
-                "completed_at": datetime.now(),
-                "updated_at": datetime.now()
-            }}
+            {"$set": update_fields}
         )
-        return result.modified_count > 0
+        return update_result.modified_count > 0
     
     async def fail_task(self, task_id:str, error_message:str) -> bool:
         database = db.get_database()

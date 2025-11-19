@@ -1,7 +1,8 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from app.services.github_service import GitHubService
 from app.services.repository_service import RepositoryService
 from app.services.task_service import TaskService
+from app.services.file_processing_service import FileProcessingService
 from app.models.schemas import RepositoryCreate, RepositoryResponse, TaskResponse
 
 class RepositoryController:
@@ -11,8 +12,9 @@ class RepositoryController:
         self.github_service = GitHubService()
         self.repository_service = RepositoryService()
         self.task_service = TaskService()
+        self.file_processing_service = FileProcessingService()
 
-    async def add_repository(self, request: RepositoryCreate) -> dict:
+    async def add_repository(self, request: RepositoryCreate, background_tasks: BackgroundTasks) -> dict:
           """
           Add a new repository with immediate metadata fetch.
 
@@ -100,6 +102,15 @@ class RepositoryController:
 
               # Link task to repository
               await self.repository_service.update_task_id(repo_id, task_id)
+
+              # ✅ TRIGGER BACKGROUND PROCESSING
+              background_tasks.add_task(
+                  self.file_processing_service.process_repository_files,
+                  repo_id=repo_id,
+                  session_id=request.session_id,
+                  task_id=task_id
+              )
+              print(f"🚀 Background file processing started!")
 
               print(f"🎉 Repository added successfully!")
               return {
