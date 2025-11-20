@@ -421,12 +421,64 @@ class TreeSitterParser(BaseParser):
         }
 
         if node.type in import_types.get(language, []):
-            import_text = code[node.start_byte:node.end_byte]
-            # Extract the actual module name from the import statement
-            imports.append(import_text.strip())
+            import_path = self._extract_import_path(node, code, language)
+            if import_path:
+                imports.append(import_path)
 
         for child in node.children:
             self._traverse_imports(child, code, language, imports)
+
+    def _extract_import_path(self, node, code: str, language: str) -> str:
+        """Extract just the module path from an import statement"""
+        import re
+
+        if language in ['javascript', 'typescript']:
+            # For JS/TS: import {...} from "path" or import "path"
+            # Find the string node (source)
+            for child in node.children:
+                if child.type == 'string':
+                    # Extract string content without quotes
+                    string_content = code[child.start_byte:child.end_byte]
+                    # Remove quotes (single or double)
+                    return string_content.strip('"\'')
+
+        elif language == 'go':
+            # For Go: import "path" or import ("path1" "path2")
+            for child in node.children:
+                if child.type == 'interpreted_string_literal':
+                    string_content = code[child.start_byte:child.end_byte]
+                    return string_content.strip('"')
+
+        elif language == 'java':
+            # For Java: import com.example.Class;
+            for child in node.children:
+                if child.type == 'scoped_identifier':
+                    return code[child.start_byte:child.end_byte].strip()
+
+        elif language == 'rust':
+            # For Rust: use std::collections::HashMap;
+            import_text = code[node.start_byte:node.end_byte]
+            # Extract path after 'use' keyword
+            match = re.search(r'use\s+([\w:]+)', import_text)
+            if match:
+                return match.group(1)
+
+        elif language in ['cpp', 'c']:
+            # For C/C++: #include "header.h" or #include <header>
+            for child in node.children:
+                if child.type in ['string_literal', 'system_lib_string']:
+                    string_content = code[child.start_byte:child.end_byte]
+                    return string_content.strip('"<>')
+
+        elif language == 'php':
+            # For PHP: use Namespace\Class;
+            import_text = code[node.start_byte:node.end_byte]
+            match = re.search(r'use\s+([\w\\]+)', import_text)
+            if match:
+                return match.group(1)
+
+        # Fallback: return empty string
+        return ""
 
     def _extract_node_name(self, node, code: str) -> str:
         """Extract name from a node"""

@@ -44,9 +44,20 @@ class TaskService:
         task_doc = await collection.find_one({"task_id": task_id})
         return task_doc
     
-    async def update_progress(self, task_id:str, current_step:str, total_files:int=0, processed_files:int=0) -> bool:
+    async def update_progress(self, task_id:str, processed_files:int, total_files:int) -> bool:
+        """Update task progress with processed/total file counts"""
         database = db.get_database()
         collection = database[self.collection_name]
+
+        # Auto-generate current_step description
+        if processed_files == 0:
+            current_step = "Starting file processing"
+        elif processed_files >= total_files:
+            current_step = "Finalizing"
+        else:
+            percentage = int((processed_files / total_files) * 100)
+            current_step = f"Processing files ({percentage}% complete)"
+
         result = await collection.update_one(
             {"task_id": task_id},
             {"$set": {

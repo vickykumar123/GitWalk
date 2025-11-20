@@ -263,3 +263,36 @@ class FileService:
           database = db.get_database()
           collection = database[self.collection_name]
           return await collection.count_documents({"repo_id": repo_id, "parsed": True})
+
+    async def bulk_update_dependencies(self, repo_id: str, dependencies: Dict[str, Dict]) -> int:
+          """
+          Bulk update dependencies for all files in a repository.
+
+          Args:
+              repo_id: Repository ID
+              dependencies: Map of {file_path: {imports, imported_by, external_imports}}
+
+          Returns:
+              Number of files updated
+          """
+          database = db.get_database()
+          collection = database[self.collection_name]
+
+          updated_count = 0
+
+          for file_path, deps in dependencies.items():
+              result = await collection.update_one(
+                  {"repo_id": repo_id, "path": file_path},
+                  {
+                      "$set": {
+                          "dependencies.imports": deps['imports'],
+                          "dependencies.imported_by": deps['imported_by'],
+                          "dependencies.external_imports": deps['external_imports'],
+                          "updated_at": datetime.now()
+                      }
+                  }
+              )
+              if result.modified_count > 0:
+                  updated_count += 1
+
+          return updated_count

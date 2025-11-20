@@ -21,3 +21,8 @@ async def get_repository_tree(repo_id: str):
 @router.get("/tasks/{task_id}", response_model=TaskResponse, tags=["Tasks"])
 async def get_task_status(task_id: str):
     return await controller.get_task_status(task_id)
+
+@router.get("/{repo_id}/files", response_model=dict)
+async def get_repository_files(repo_id: str, limit: int = 50):
+    """Get files for a repository with dependency information"""
+    return await controller.get_files(repo_id, limit)

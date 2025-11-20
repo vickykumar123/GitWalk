@@ -9,6 +9,7 @@ from app.services.github_service import GitHubService
 from app.services.task_service import TaskService
 from app.services.repository_service import RepositoryService
 from app.services.parsers.parser_factory import ParserFactory
+from app.services.dependency_resolver import DependencyResolver
 
 class FileProcessingService:
     """
@@ -77,7 +78,11 @@ class FileProcessingService:
                 await self.task_service.update_progress(task_id, processed_count, total_files)
                 print(f"\n Updated task {task_id} progress: {processed_count}/{total_files} \n")
 
-            # step 4: Complete task
+            # step 4: Resolve dependencies
+            print(f"\n🔗 Resolving dependencies...")
+            await self._resolve_dependencies(repo_id)
+
+            # step 5: Complete task
             await self.task_service.complete_task(task_id, result = {"files_processed": processed_count, "total_files": total_files })
             await self.repo_service.update_status(repo_id, "completed")
             print(f"\n Completed file processing for repo {repo_id} \n")
@@ -322,3 +327,61 @@ class FileProcessingService:
               SHA-256 hash as hex string
           """
           return hashlib.sha256(content.encode('utf-8')).hexdigest()
+
+    async def _resolve_dependencies(self, repo_id: str):
+          """
+          Resolve dependencies for all files in repository.
+
+          This step happens AFTER all files are parsed.
+
+          Steps:
+          1. Fetch all files from database
+          2. Create DependencyResolver with file list
+          3. Resolve all import statements to actual file paths
+          4. Build reverse dependency graph (imported_by)
+          5. Save results back to database
+
+          Args:
+              repo_id: Repository ID
+          """
+          try:
+              print(f"\n📚 Fetching all files for dependency resolution...")
+
+              # Step 1: Fetch all files
+              files = await self.file_service.get_files_by_repo(repo_id)
+
+              if not files:
+                  print(f"⚠️  No files found for repo {repo_id}")
+                  return
+
+              print(f"📦 Found {len(files)} files to analyze")
+
+              # Step 2: Create resolver
+              resolver = DependencyResolver(repo_id, files)
+
+              # Step 3: Resolve all dependencies
+              dependencies = resolver.resolve_all_dependencies()
+
+              # Step 4: Save to database
+              print(f"\n💾 Saving dependency relationships to database...")
+              updated_count = await self.file_service.bulk_update_dependencies(repo_id, dependencies)
+
+              print(f"✅ Updated dependencies for {updated_count} files")
+
+              # Step 5: Get and display stats
+              stats = resolver.get_dependency_stats(dependencies)
+              print(f"\n📊 Dependency Resolution Stats:")
+              print(f"   Total files: {stats['total_files']}")
+              print(f"   Internal dependencies: {stats['total_internal_dependencies']}")
+              print(f"   External dependencies: {stats['total_external_dependencies']}")
+              print(f"   Avg dependencies per file: {stats['average_dependencies_per_file']:.2f}")
+
+              # Show most imported files
+              if stats['most_imported_files']:
+                  print(f"\n🔥 Most imported files:")
+                  for item in stats['most_imported_files'][:5]:
+                      print(f"      {item['path']} (imported by {item['imported_by_count']} files)")
+
+          except Exception as e:
+              print(f"❌ Error resolving dependencies for repo {repo_id}: {str(e)}")
+              raise

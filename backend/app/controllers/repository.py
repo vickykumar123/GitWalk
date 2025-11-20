@@ -3,6 +3,7 @@ from app.services.github_service import GitHubService
 from app.services.repository_service import RepositoryService
 from app.services.task_service import TaskService
 from app.services.file_processing_service import FileProcessingService
+from app.services.file_service import FileService
 from app.models.schemas import RepositoryCreate, RepositoryResponse, TaskResponse
 
 class RepositoryController:
@@ -13,6 +14,7 @@ class RepositoryController:
         self.repository_service = RepositoryService()
         self.task_service = TaskService()
         self.file_processing_service = FileProcessingService()
+        self.file_service = FileService()
 
     async def add_repository(self, request: RepositoryCreate, background_tasks: BackgroundTasks) -> dict:
           """
@@ -256,3 +258,36 @@ class RepositoryController:
             updated_at=repo_doc["updated_at"],
             last_fetched=repo_doc.get("last_fetched")
         )
+
+    async def get_files(self, repo_id: str, limit: int = 50) -> dict:
+        """Get files for a repository with dependency information"""
+        files = await self.file_service.get_files_by_repo(repo_id, limit=limit)
+
+        if not files:
+            raise HTTPException(status_code=404, detail="No files found for this repository")
+
+        # Format response
+        formatted_files = []
+        for file in files:
+            formatted_files.append({
+                "file_id": file["file_id"],
+                "path": file["path"],
+                "filename": file["filename"],
+                "language": file["language"],
+                "size_bytes": file["size_bytes"],
+                "parsed": file.get("parsed", False),
+                "functions_count": len(file.get("functions", [])),
+                "classes_count": len(file.get("classes", [])),
+                "imports_count": len(file.get("imports", [])),
+                "dependencies": file.get("dependencies", {
+                    "imports": [],
+                    "imported_by": [],
+                    "external_imports": []
+                })
+            })
+
+        return {
+            "repo_id": repo_id,
+            "total_files": len(formatted_files),
+            "files": formatted_files
+        }
