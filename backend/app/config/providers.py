@@ -28,8 +28,8 @@ class ProviderConfig:
         },
         "together": {
             "base_url": "https://api.together.xyz/v1",
-            "embedding_model": "togethercomputer/m2-bert-80M-32k-retrieval",  # 768-dim, 32K context
-            "description": "Together AI - M2-BERT embeddings (32K context, optimized for code)"
+            "embedding_model": "togethercomputer/m2-bert-80M-8k-retrieval",  # 768-dim, 8K context
+            "description": "Together AI - M2-BERT 8K (768-dim, 8K context, state-of-the-art retrieval)"
         },
         "fireworks": {
             "base_url": "https://api.fireworks.ai/inference/v1",

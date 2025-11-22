@@ -269,28 +269,28 @@ class EmbeddingService:
                     print(f"  ❌ Error embedding function {func['name']}: {e}")
                     continue
 
-            # 3. Generate embedding for FILE SUMMARY (keep as-is)
+            # 3. Generate embedding for FILE SUMMARY (stored separately at top level)
+            summary_embedding = None
             summary = file_data.get('summary')
             if summary:
                 try:
                     embedding = await self._encode_text(summary)
-                    embedding = list(embedding) if embedding else []
+                    summary_embedding = list(embedding) if embedding else None
 
-                    if embedding:
-                        embeddings.append({
-                            "type": "summary",
-                            "text": summary,
-                            "embedding": embedding
-                        })
-                        print(f"  ✓ Embedded summary")
+                    if summary_embedding:
+                        print(f"  ✓ Embedded summary (will store at top level)")
                 except Exception as e:
                     print(f"  ❌ Error embedding summary: {e}")
 
             # Save embeddings to database
-            if embeddings:
-                print(f"  📝 Saving {len(embeddings)} embeddings for {path}")
-                await self.file_service.update_embeddings(file_id, embeddings)
-                print(f"  ✅ {path}: {len(embeddings)} embeddings saved")
+            # NOTE: summary_embedding is stored separately at document level
+            # embeddings array contains only code-level embeddings (classes, functions)
+            if embeddings or summary_embedding:
+                embeddings_count = len(embeddings)
+                has_summary = "yes" if summary_embedding else "no"
+                print(f"  📝 Saving {embeddings_count} code embeddings + summary ({has_summary}) for {path}")
+                await self.file_service.update_embeddings(file_id, embeddings, summary_embedding)
+                print(f"  ✅ {path}: {embeddings_count} code embeddings + summary saved")
                 return True
             else:
                 print(f"  ⚠️  {path}: No embeddings generated")
@@ -457,6 +457,8 @@ class EmbeddingService:
         """
         Regenerate summary embedding for a single file.
 
+        NEW STRUCTURE: Summary stored at top level, not in embeddings array.
+
         Args:
             file_data: File document
 
@@ -471,23 +473,21 @@ class EmbeddingService:
             # Generate embedding for summary
             embedding = await self._encode_text(summary)
             # Convert to plain Python list
-            embedding = list(embedding) if embedding else []
+            summary_embedding = list(embedding) if embedding else None
 
-            # Get existing embeddings
+            if not summary_embedding:
+                return False
+
+            # Get existing code embeddings (remove summary if it exists)
             embeddings = file_data.get('embeddings', [])
+            code_embeddings = [e for e in embeddings if e.get('type') != 'summary']
 
-            # Remove old summary embedding if exists
-            embeddings = [e for e in embeddings if e.get('type') != 'summary']
-
-            # Add new summary embedding
-            embeddings.append({
-                "type": "summary",
-                "text": summary,
-                "embedding": embedding
-            })
-
-            # Update database
-            await self.file_service.update_embeddings(file_data['file_id'], embeddings)
+            # Update database: summary at top level, only code embeddings in array
+            await self.file_service.update_embeddings(
+                file_data['file_id'],
+                code_embeddings,
+                summary_embedding  # Pass as separate parameter
+            )
             return True
 
         except Exception as e:

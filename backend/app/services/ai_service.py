@@ -237,11 +237,7 @@ Be specific about what each function does."""
             summary = response.choices[0].message.content.strip()
 
             # Save summary to database
-            await self.file_service.update_analysis(file_id, {
-                "summary": summary,
-                "model": self.model,
-                "provider": self.provider
-            })
+            await self.file_service.update_summary(file_id, summary)
 
             print(f"  ✅ {path}: Summary generated ({len(summary)} chars)")
             return True

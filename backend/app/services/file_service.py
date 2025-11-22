@@ -71,8 +71,8 @@ class FileService:
               # Embeddings (will be generated later)
               "embeddings": [],
 
-              # AI-generated analysis (will be generated later)
-              "analysis": None,
+              # AI-generated summary (will be generated later)
+              "summary": None,
 
               # Processing flags
               "parsed": False,
@@ -232,13 +232,19 @@ class FileService:
           )
           return result.modified_count > 0
 
-    async def update_embeddings(self, file_id: str, embeddings: List[Dict]) -> bool:
+    async def update_embeddings(
+          self,
+          file_id: str,
+          embeddings: List[Dict],
+          summary_embedding: Optional[List[float]] = None
+      ) -> bool:
           """
           Update file with generated embeddings.
 
           Args:
               file_id: File ID
-              embeddings: List of embedding objects
+              embeddings: List of code-level embedding objects (classes, functions)
+              summary_embedding: Optional file-level summary embedding (768 dims, stored at top level)
 
           Returns:
               True if update succeeded
@@ -247,34 +253,40 @@ class FileService:
           collection = database[self.collection_name]
 
           # Debug: Log what we're saving
-          print(f"     💾 Saving to DB: {len(embeddings)} embeddings")
+          print(f"     💾 Saving to DB: {len(embeddings)} code embeddings")
+          if summary_embedding:
+              print(f"     💾 Summary embedding: {len(summary_embedding)} dims")
           if embeddings:
               first_emb = embeddings[0]
-              print(f"     💾 First embedding keys: {list(first_emb.keys())}")
-              print(f"     💾 First embedding has 'embedding' key: {'embedding' in first_emb}")
-              if 'embedding' in first_emb:
-                  print(f"     💾 Embedding vector length: {len(first_emb['embedding'])}")
+              print(f"     💾 First code embedding keys: {list(first_emb.keys())}")
+
+          # Build update document
+          update_doc = {
+              "embeddings": embeddings,
+              "embedded": True,
+              "updated_at": datetime.now()
+          }
+
+          # Add summary_embedding at top level if provided
+          if summary_embedding:
+              update_doc["summary_embedding"] = summary_embedding
 
           result = await collection.update_one(
               {"file_id": file_id},
               {
-                  "$set": {
-                      "embeddings": embeddings,
-                      "embedded": True,
-                      "updated_at": datetime.now()
+                  "$set": update_doc
                   }
-              }
-          )
+                        )
           print(f"     💾 MongoDB update result: modified_count={result.modified_count}")
           return result.modified_count > 0
 
-    async def update_analysis(self, file_id: str, analysis: Dict) -> bool:
+    async def update_summary(self, file_id: str, summary: str) -> bool:
           """
-          Update file with AI-generated analysis.
+          Update file with AI-generated summary.
 
           Args:
               file_id: File ID
-              analysis: Analysis object with summary and embedding
+              summary: AI-generated summary text
 
           Returns:
               True if update succeeded
@@ -282,26 +294,15 @@ class FileService:
           database = db.get_database()
           collection = database[self.collection_name]
 
-          # Build update fields
-          update_fields = {
-              "analysis": analysis,
-              "analyzed": True,
-              "updated_at": datetime.now()
-          }
-
-          # Also save summary at root level for easy access
-          if "summary" in analysis:
-              update_fields["summary"] = analysis["summary"]
-
-          # Also save model/provider at root level
-          if "model" in analysis:
-              update_fields["model"] = analysis["model"]
-          if "provider" in analysis:
-              update_fields["provider"] = analysis["provider"]
-
           result = await collection.update_one(
               {"file_id": file_id},
-              {"$set": update_fields}
+              {
+                  "$set": {
+                      "summary": summary,
+                      "analyzed": True,
+                      "updated_at": datetime.now()
+                  }
+              }
           )
           return result.modified_count > 0
 

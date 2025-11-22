@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.database import db
-from app.database.indexes import create_indexes
-from app.routers import session, repository, task
+from app.database.indexes import create_all_indexes
+from app.routers import session, repository, task, query
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     print(f"🌐 Server: http://{settings.host}:{settings.port}")
 
     await db.connect_db()
-    await create_indexes()  # Create database indexes for performance
+    await create_all_indexes()  # Create database indexes + vector search index
     yield  # Application runs here
 
       # Shutdown (runs when server stops)
@@ -41,6 +41,7 @@ app.add_middleware(
 app.include_router(session.router)
 app.include_router(repository.router)
 app.include_router(task.router)
+app.include_router(query.router)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
