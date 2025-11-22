@@ -193,6 +193,10 @@ class RepositoryResponse(BaseModel):
       total_size_bytes: int = 0
       languages_breakdown: Optional[dict] = None
 
+      # AI-generated content
+      overview: Optional[str] = None
+      overview_generated_at: Optional[datetime] = None
+
       # Timestamps
       created_at: datetime
       updated_at: datetime

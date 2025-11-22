@@ -118,6 +118,42 @@ class FileService:
           cursor = collection.find({"repo_id": repo_id}, projection).limit(limit)
           return await cursor.to_list(length=limit)
 
+    async def get_files_by_repo_with_full_embeddings(self, repo_id: str, limit: int = 1000) -> List[Dict]:
+          """
+          Get all files for a repository WITH full embedding vectors.
+
+          Used when we need to update embeddings (to avoid overwriting existing data).
+          Only excludes content field.
+          """
+          database = db.get_database()
+          collection = database[self.collection_name]
+
+          # Only exclude content, keep full embeddings with vectors
+          projection = {
+              "content": 0  # Exclude full file content only
+          }
+
+          cursor = collection.find({"repo_id": repo_id}, projection).limit(limit)
+          return await cursor.to_list(length=limit)
+
+    async def get_files_by_repo_with_content(self, repo_id: str, limit: int = 1000) -> List[Dict]:
+          """
+          Get all files for a repository WITH content but WITHOUT embedding vectors.
+
+          Used for embedding generation - need content to extract code chunks.
+          Excludes embedding vectors to reduce network transfer.
+          """
+          database = db.get_database()
+          collection = database[self.collection_name]
+
+          # Exclude embedding vectors, keep content
+          projection = {
+              "embeddings.embedding": 0  # Exclude 768-dim vectors
+          }
+
+          cursor = collection.find({"repo_id": repo_id}, projection).limit(limit)
+          return await cursor.to_list(length=limit)
+
     async def update_parsed_data(
           self,
           repo_id: str,
@@ -210,6 +246,15 @@ class FileService:
           database = db.get_database()
           collection = database[self.collection_name]
 
+          # Debug: Log what we're saving
+          print(f"     💾 Saving to DB: {len(embeddings)} embeddings")
+          if embeddings:
+              first_emb = embeddings[0]
+              print(f"     💾 First embedding keys: {list(first_emb.keys())}")
+              print(f"     💾 First embedding has 'embedding' key: {'embedding' in first_emb}")
+              if 'embedding' in first_emb:
+                  print(f"     💾 Embedding vector length: {len(first_emb['embedding'])}")
+
           result = await collection.update_one(
               {"file_id": file_id},
               {
@@ -220,6 +265,7 @@ class FileService:
                   }
               }
           )
+          print(f"     💾 MongoDB update result: modified_count={result.modified_count}")
           return result.modified_count > 0
 
     async def update_analysis(self, file_id: str, analysis: Dict) -> bool:

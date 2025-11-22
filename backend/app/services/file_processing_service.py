@@ -93,11 +93,14 @@ class FileProcessingService:
                 self._generate_summaries(repo_id, ai_service)
             )
 
-            # step 7: Regenerate embeddings for summaries (must run after summaries)
-            print(f"\n🔮 Regenerating embeddings for summaries...")
-            await self._regenerate_summary_embeddings(repo_id, embedding_service)
+            # step 7-8: Regenerate summary embeddings + generate repo overview (parallel)
+            print(f"\n🚀 Running parallel post-processing: summary embeddings + repository overview...")
+            await asyncio.gather(
+                self._regenerate_summary_embeddings(repo_id, embedding_service),
+                self._generate_repository_overview(repo_id, ai_service)
+            )
 
-            # step 8: Complete task
+            # step 9: Complete task
             await self.task_service.complete_task(task_id, result = {"files_processed": processed_count, "total_files": total_files })
             await self.repo_service.update_status(repo_id, "completed")
             print(f"\n Completed file processing for repo {repo_id} \n")
@@ -443,7 +446,7 @@ class FileProcessingService:
           """
           Regenerate embeddings for file summaries.
 
-          Runs AFTER summaries are generated.
+          Runs AFTER summaries are generated (in parallel with repository overview).
           Creates embeddings for semantic search on summaries.
 
           Args:
@@ -456,3 +459,23 @@ class FileProcessingService:
               print(f"❌ Error regenerating summary embeddings for repo {repo_id}: {str(e)}")
               # Don't raise - summary embeddings are optional
               print(f"⚠️  Continuing without summary embeddings...")
+
+    async def _generate_repository_overview(self, repo_id: str, ai_service: AIService):
+          """
+          Generate repository-level overview by aggregating file summaries.
+
+          Runs AFTER file summaries are generated (in parallel with summary embeddings).
+          Creates a high-level summary of the entire codebase.
+
+          Args:
+              repo_id: Repository ID
+              ai_service: Initialized AIService with API key
+          """
+          try:
+              overview = await ai_service.generate_repository_overview(repo_id)
+              if overview:
+                  await self.repo_service.save_overview(repo_id, overview)
+          except Exception as e:
+              print(f"❌ Error generating repository overview for repo {repo_id}: {str(e)}")
+              # Don't raise - overview is optional, don't fail the whole pipeline
+              print(f"⚠️  Continuing without repository overview...")

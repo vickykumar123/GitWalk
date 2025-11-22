@@ -108,8 +108,8 @@ class EmbeddingService:
             # Load model (first time only)
             await self._load_model()
 
-            # Fetch all parsed files
-            files = await self.file_service.get_files_by_repo(repo_id)
+            # Fetch all parsed files WITH content (need content to extract code)
+            files = await self.file_service.get_files_by_repo_with_content(repo_id)
 
             if not files:
                 print(f"⚠️  No files found for repo {repo_id}")
@@ -153,10 +153,11 @@ class EmbeddingService:
         """
         Generate embeddings for a single file.
 
-        Creates embeddings for:
-        - Each function (code + signature)
-        - Each class (name + methods)
-        - File summary (if available)
+        NEW STRATEGY:
+        - Entire classes (with all methods) - not individual methods
+        - Standalone functions only (not methods)
+        - Large classes (800+ lines): sliding window chunks with overlap
+        - File summary (keep as-is)
 
         Args:
             file_data: File document from MongoDB
@@ -167,74 +168,197 @@ class EmbeddingService:
         try:
             file_id = file_data['file_id']
             path = file_data['path']
+            content = file_data.get('content', '')
+
+            if not content:
+                print(f"  ⚠️  {path}: No content available")
+                return False
 
             embeddings = []
 
-            # 1. Generate embeddings for FUNCTIONS
-            functions = file_data.get('functions', [])
-            for func in functions:
-                # Combine signature + name for better context
-                text = f"{func.get('signature', func['name'])}"
-
-                # If function has a parent class, include it
-                if func.get('parent_class'):
-                    text = f"{func['parent_class']}.{text}"
-
-                embedding = await self._encode_text(text)
-
-                embeddings.append({
-                    "type": "function",
-                    "name": func['name'],
-                    "parent_class": func.get('parent_class'),
-                    "text": text,
-                    "embedding": embedding,
-                    "line_start": func.get('line_start'),
-                    "line_end": func.get('line_end')
-                })
-
-            # 2. Generate embeddings for CLASSES
+            # 1. Generate embeddings for CLASSES (entire class code)
             classes = file_data.get('classes', [])
             for cls in classes:
-                # Combine class name + method names for context
-                methods = cls.get('methods', [])
-                method_names = [m['name'] for m in methods]
-                text = f"class {cls['name']}: {', '.join(method_names)}"
+                class_size = cls['line_end'] - cls['line_start']
 
-                embedding = await self._encode_text(text)
+                if class_size <= 800:
+                    # Small/medium class: embed entire class code
+                    code = self._extract_code_by_lines(
+                        content,
+                        cls['line_start'],
+                        cls['line_end']
+                    )
 
-                embeddings.append({
-                    "type": "class",
-                    "name": cls['name'],
-                    "text": text,
-                    "embedding": embedding,
-                    "line_start": cls.get('line_start'),
-                    "line_end": cls.get('line_end'),
-                    "method_count": len(methods)
-                })
+                    try:
+                        embedding = await self._encode_text(code)
+                        embedding = list(embedding) if embedding else []
 
-            # 3. Generate embedding for FILE SUMMARY (if available)
+                        if embedding:
+                            embeddings.append({
+                                "type": "class",
+                                "name": cls['name'],
+                                "code": code,  # Store full code
+                                "embedding": embedding,
+                                "line_start": cls['line_start'],
+                                "line_end": cls['line_end'],
+                                "method_count": len(cls.get('methods', []))
+                            })
+                            print(f"  ✓ Embedded class {cls['name']} ({class_size} lines)")
+                    except Exception as e:
+                        print(f"  ❌ Error embedding class {cls['name']}: {e}")
+                        continue
+                else:
+                    # Large class: use sliding window chunks
+                    print(f"  📦 Large class {cls['name']} ({class_size} lines) - using chunks")
+                    chunks = self._create_sliding_window_chunks(
+                        content,
+                        cls['line_start'],
+                        cls['line_end'],
+                        chunk_size=700,
+                        overlap=100
+                    )
+
+                    for i, chunk in enumerate(chunks):
+                        try:
+                            embedding = await self._encode_text(chunk['code'])
+                            embedding = list(embedding) if embedding else []
+
+                            if embedding:
+                                embeddings.append({
+                                    "type": "class_chunk",
+                                    "name": f"{cls['name']}_chunk_{i+1}",
+                                    "parent_class": cls['name'],
+                                    "code": chunk['code'],  # Store full chunk code
+                                    "embedding": embedding,
+                                    "line_start": chunk['start'],
+                                    "line_end": chunk['end'],
+                                    "chunk_index": i + 1,
+                                    "total_chunks": len(chunks)
+                                })
+                                print(f"  ✓ Embedded {cls['name']} chunk {i+1}/{len(chunks)}")
+                        except Exception as e:
+                            print(f"  ❌ Error embedding chunk {i+1}: {e}")
+                            continue
+
+            # 2. Generate embeddings for STANDALONE FUNCTIONS (not methods)
+            functions = file_data.get('functions', [])
+            standalone_functions = [f for f in functions if not f.get('parent_class')]
+
+            for func in standalone_functions:
+                code = self._extract_code_by_lines(
+                    content,
+                    func['line_start'],
+                    func['line_end']
+                )
+
+                try:
+                    embedding = await self._encode_text(code)
+                    embedding = list(embedding) if embedding else []
+
+                    if embedding:
+                        embeddings.append({
+                            "type": "function",
+                            "name": func['name'],
+                            "code": code,  # Store full function code
+                            "embedding": embedding,
+                            "line_start": func['line_start'],
+                            "line_end": func['line_end']
+                        })
+                        print(f"  ✓ Embedded function {func['name']}")
+                except Exception as e:
+                    print(f"  ❌ Error embedding function {func['name']}: {e}")
+                    continue
+
+            # 3. Generate embedding for FILE SUMMARY (keep as-is)
             summary = file_data.get('summary')
             if summary:
-                embedding = await self._encode_text(summary)
+                try:
+                    embedding = await self._encode_text(summary)
+                    embedding = list(embedding) if embedding else []
 
-                embeddings.append({
-                    "type": "summary",
-                    "text": summary,
-                    "embedding": embedding
-                })
+                    if embedding:
+                        embeddings.append({
+                            "type": "summary",
+                            "text": summary,
+                            "embedding": embedding
+                        })
+                        print(f"  ✓ Embedded summary")
+                except Exception as e:
+                    print(f"  ❌ Error embedding summary: {e}")
 
             # Save embeddings to database
             if embeddings:
+                print(f"  📝 Saving {len(embeddings)} embeddings for {path}")
                 await self.file_service.update_embeddings(file_id, embeddings)
-                print(f"  ✅ {path}: {len(embeddings)} embeddings")
+                print(f"  ✅ {path}: {len(embeddings)} embeddings saved")
                 return True
             else:
-                print(f"  ⚠️  {path}: No content to embed")
+                print(f"  ⚠️  {path}: No embeddings generated")
                 return False
 
         except Exception as e:
             print(f"  ❌ Error embedding {file_data.get('path')}: {e}")
             return False
+
+    def _extract_code_by_lines(self, content: str, start_line: int, end_line: int) -> str:
+        """
+        Extract code from content between line numbers.
+
+        Args:
+            content: Full file content
+            start_line: Starting line number (1-indexed)
+            end_line: Ending line number (1-indexed)
+
+        Returns:
+            Code snippet as string
+        """
+        lines = content.split('\n')
+        # Convert to 0-indexed
+        return '\n'.join(lines[start_line-1:end_line])
+
+    def _create_sliding_window_chunks(
+        self,
+        content: str,
+        start_line: int,
+        end_line: int,
+        chunk_size: int = 700,
+        overlap: int = 100
+    ) -> List[Dict]:
+        """
+        Create overlapping chunks from code using sliding window.
+
+        Args:
+            content: Full file content
+            start_line: Starting line number
+            end_line: Ending line number
+            chunk_size: Lines per chunk (default 700)
+            overlap: Overlapping lines (default 100)
+
+        Returns:
+            List of chunks with code and line numbers
+        """
+        chunks = []
+        step = chunk_size - overlap  # 600 lines
+
+        current = start_line
+        while current < end_line:
+            chunk_end = min(current + chunk_size, end_line)
+            code = self._extract_code_by_lines(content, current, chunk_end)
+
+            chunks.append({
+                "start": current,
+                "end": chunk_end,
+                "code": code
+            })
+
+            # Move to next chunk
+            current += step
+
+            # If we've covered the end, break
+            if chunk_end >= end_line:
+                break
+
+        return chunks
 
     async def _encode_text(self, text: str) -> List[float]:
         """
@@ -260,13 +384,25 @@ class EmbeddingService:
             return embedding.tolist()
         else:
             # Use provider's embedding API
-            response = await self.client.embeddings.create(
-                model=self.embedding_model,
-                input=text,
-                dimensions=768  # Force 768 dimensions for consistency
-            )
+            # Note: dimensions parameter only supported by some providers (OpenAI)
+            try:
+                if self.provider == "openai":
+                    response = await self.client.embeddings.create(
+                        model=self.embedding_model,
+                        input=text,
+                        dimensions=768
+                    )
+                else:
+                    # For other providers (like Gemini), use default dimensions
+                    response = await self.client.embeddings.create(
+                        model=self.embedding_model,
+                        input=text
+                    )
 
-            return response.data[0].embedding
+                return response.data[0].embedding
+            except Exception as e:
+                print(f"❌ Error generating embedding: {e}")
+                raise
 
     async def regenerate_summary_embeddings(self, repo_id: str):
         """
@@ -282,7 +418,8 @@ class EmbeddingService:
 
         await self._load_model()
 
-        files = await self.file_service.get_files_by_repo(repo_id)
+        # IMPORTANT: Fetch files WITHOUT projection to get full embedding vectors
+        files = await self.file_service.get_files_by_repo_with_full_embeddings(repo_id)
 
         # Filter files with summaries
         files_with_summaries = [f for f in files if f.get('summary')]
@@ -333,6 +470,8 @@ class EmbeddingService:
 
             # Generate embedding for summary
             embedding = await self._encode_text(summary)
+            # Convert to plain Python list
+            embedding = list(embedding) if embedding else []
 
             # Get existing embeddings
             embeddings = file_data.get('embeddings', [])

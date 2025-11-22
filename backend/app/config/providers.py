@@ -26,12 +26,16 @@ class ProviderConfig:
             "embedding_model": "text-embedding-004",
             "description": "Google Gemini via OpenAI-compatible API"
         },
-        # Easy to add more providers in the future:
-        # "together": {
-        #     "base_url": "https://api.together.xyz/v1",
-        #     "embedding_model": "togethercomputer/m2-bert-80M-8k-retrieval",
-        #     "description": "Together AI"
-        # },
+        "together": {
+            "base_url": "https://api.together.xyz/v1",
+            "embedding_model": "togethercomputer/m2-bert-80M-32k-retrieval",  # 768-dim, 32K context
+            "description": "Together AI - M2-BERT embeddings (32K context, optimized for code)"
+        },
+        "fireworks": {
+            "base_url": "https://api.fireworks.ai/inference/v1",
+            "embedding_model": "nomic-ai/nomic-embed-text-v1.5",  # 768-dim, 8K context
+            "description": "Fireworks AI - Nomic embeddings (8K context)"
+        },
     }
 
     @classmethod

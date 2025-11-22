@@ -110,7 +110,33 @@ class RepositoryService:
             {"$set": update_fields}
         )
         return result.modified_count > 0
-    
+
+    async def save_overview(self, repo_id: str, overview: str) -> bool:
+        """
+        Save repository overview.
+
+        Args:
+            repo_id: Repository ID
+            overview: Repository overview text
+
+        Returns:
+            True if saved successfully
+        """
+        database = db.get_database()
+        collection = database[self.collection_name]
+
+        result = await collection.update_one(
+            {"repo_id": repo_id},
+            {
+                "$set": {
+                    "overview": overview,
+                    "overview_generated_at": datetime.now(),
+                    "updated_at": datetime.now()
+                }
+            }
+        )
+        return result.modified_count > 0
+
     async def update_task_id(self, repo_id:str, task_id:str) -> bool:
         database = db.get_database()
         collection = database[self.collection_name]

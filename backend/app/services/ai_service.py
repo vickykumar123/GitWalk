@@ -8,7 +8,8 @@ Features:
 - Runs in background processing pipeline
 """
 
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+
 import os
 import asyncio
 from openai import AsyncOpenAI
@@ -66,7 +67,9 @@ class AIService:
         """Get default model for summary generation"""
         defaults = {
             "openai": "gpt-4o-mini",  # Fast and cheap
-            "gemini": "gemini-1.5-flash"  # Fast Gemini model
+            "gemini": "gemini-1.5-flash",  # Fast Gemini model
+            "together": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",  # 131K context, best balance
+            "fireworks": "accounts/fireworks/models/llama-v3p1-70b-instruct"  # 131K context
         }
         return defaults.get(provider, "gpt-4o-mini")
 
@@ -89,23 +92,37 @@ class AIService:
             print(f"   Provider: {self.provider}")
             print(f"   Model: {self.model}")
 
-            # Fetch all parsed files
+            # Fetch all files (code + config + docs, but exclude dependencies/build)
             files = await self.file_service.get_files_by_repo(repo_id)
-            parsed_files = [f for f in files if f.get('parsed', False)]
 
-            if not parsed_files:
-                print(f"⚠️  No parsed files found for repo {repo_id}")
+            # Filter out unnecessary directories
+            excluded_dirs = [
+                'node_modules/', 'vendor/', 'target/',  # Dependencies
+                '.git/', '.svn/', '.hg/',               # Version control
+                'dist/', 'build/', 'out/', '.next/',    # Build artifacts
+                '__pycache__/', '.pytest_cache/',       # Python cache
+                'venv/', 'env/', '.venv/',              # Python virtual envs
+            ]
+
+            files_to_summarize = [
+                f for f in files
+                if not any(f['path'].startswith(excluded) for excluded in excluded_dirs)
+            ]
+
+            if not files_to_summarize:
+                print(f"⚠️  No files to summarize for repo {repo_id}")
                 return
 
-            print(f"📦 Found {len(parsed_files)} parsed files")
+            print(f"📦 Found {len(files_to_summarize)} files to summarize (code + config + docs)")
+            print(f"   Excluded {len(files) - len(files_to_summarize)} files from dependencies/build dirs")
 
             # Generate summaries in parallel batches of 5
             BATCH_SIZE = 5
             generated_count = 0
-            total_files = len(parsed_files)
+            total_files = len(files_to_summarize)
 
             for i in range(0, total_files, BATCH_SIZE):
-                batch = parsed_files[i:i + BATCH_SIZE]
+                batch = files_to_summarize[i:i + BATCH_SIZE]
                 batch_num = (i // BATCH_SIZE) + 1
                 total_batches = (total_files + BATCH_SIZE - 1) // BATCH_SIZE
 
@@ -123,7 +140,7 @@ class AIService:
                         generated_count += 1
 
             print(f"\n✅ AI summary generation complete!")
-            print(f"   Generated {generated_count}/{len(parsed_files)} summaries")
+            print(f"   Generated {generated_count}/{len(files_to_summarize)} summaries")
 
         except Exception as e:
             print(f"❌ Error generating summaries for repo {repo_id}: {e}")
@@ -159,32 +176,41 @@ class AIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are a code analysis expert. Generate concise, structured summaries focusing on critical issues only.
+                        "content": """You are a code analysis expert. Generate concise, structured summaries.
 
 Format:
-1. **Overview (3-4 sentences)**: What the file does, main functionality, and key components
-2. **Performance**: ONLY critical bottlenecks or major scalability issues (omit if none)
-3. **Security**: ONLY medium/high severity vulnerabilities (omit if none)
-4. **Notable**: ONLY critical gotchas or important warnings (omit if none)
+1. **Overview**: What this file does (1 sentence)
+2. **Key Functions** (list 3-5 most important):
+   - functionName(): What it does in 1 sentence
+   - anotherFunction(): What it does in 1 sentence
+3. **Dependencies**: Key imports/integrations (1 sentence)
+4. **Security** (optional): ONLY medium/high severity issues
+5. **Notable** (optional): ONLY critical gotchas
 
 Rules:
-- Keep overview to 3-4 sentences maximum
-- Only include Performance/Security/Notable sections if there are SIGNIFICANT issues
-- Skip minor optimizations, low-priority concerns, or trivial patterns
-- Focus on critical issues developers MUST be aware of
+- MUST list individual functions with what they do
+- Focus on 3-5 most important functions/methods
+- Keep each function description to 1 sentence
+- Total summary under 1000 characters
+- Skip Performance/Security/Notable if no significant issues
 
 Example:
-This file implements user authentication using JWT tokens. It provides login, logout, and session management through the AuthService class. The main workflow validates credentials, generates tokens, and maintains session state.
+**Overview**: Implements user authentication using JWT tokens for login and session management.
 
-**Security:**
+**Key Functions**:
+- validateToken(): Verifies JWT signature and checks expiration dates
+- generateToken(): Creates new JWT tokens with user claims and metadata
+- login(): Authenticates user credentials and returns session token
+- logout(): Invalidates user session and clears tokens
+- refreshToken(): Generates new token from valid refresh token
+
+**Dependencies**: Uses jsonwebtoken library and integrates with user database.
+
+**Security**:
 - JWT tokens lack expiration, potential security risk
 - Password comparison vulnerable to timing attacks
 
-**Notable:**
-- Breaks compatibility with auth v1.x API
-- Requires Redis for session storage (hard dependency)
-
-Be concise. Only mention critical issues."""
+Be specific about what each function does."""
                     },
                     {
                         "role": "user",
@@ -266,8 +292,16 @@ Be concise. Only mention critical issues."""
         if len(content) > MAX_CONTENT_LENGTH:
             content = content[:MAX_CONTENT_LENGTH] + "\n... (truncated)"
 
-        # Build prompt
-        prompt = f"""Analyze this {language} file and generate a comprehensive summary.
+        # Detect file type
+        is_code_file = len(functions) > 0 or len(classes) > 0
+        is_config = path.endswith(('.json', '.yml', '.yaml', '.toml', '.ini', '.env'))
+        is_doc = path.endswith(('.md', '.txt', '.rst'))
+        is_script = path.endswith(('.sh', '.bash', '.ps1', 'Makefile', 'Dockerfile'))
+
+        # Build prompt based on file type
+        if is_code_file:
+            # Code file with functions/classes
+            prompt = f"""Analyze this {language} file and generate a comprehensive summary.
 
 **File:** `{path}`
 
@@ -290,5 +324,209 @@ Generate a concise summary (3-5 sentences) covering:
 2. Key functionality and components
 3. Dependencies and how it fits in the codebase
 4. Any notable patterns, concerns, or complexity"""
+        elif is_config:
+            # Configuration file
+            prompt = f"""Analyze this configuration file and generate a summary.
+
+**File:** `{path}` (Configuration)
+
+**Content:**
+```{language}
+{content}
+```
+
+Generate a concise summary covering:
+1. What this configuration file controls
+2. Key settings and their purpose
+3. Any notable or critical configurations"""
+        elif is_doc:
+            # Documentation file
+            prompt = f"""Analyze this documentation file and generate a summary.
+
+**File:** `{path}` (Documentation)
+
+**Content:**
+```{language}
+{content}
+```
+
+Generate a concise summary covering:
+1. Main topic or purpose of this document
+2. Key information or instructions provided
+3. Target audience (developers, users, etc.)"""
+        elif is_script:
+            # Script file
+            prompt = f"""Analyze this script file and generate a summary.
+
+**File:** `{path}` (Script)
+
+**Content:**
+```{language}
+{content}
+```
+
+Generate a concise summary covering:
+1. What this script does
+2. When/how it should be run
+3. Any important dependencies or requirements"""
+        else:
+            # Other file types
+            prompt = f"""Analyze this file and generate a summary.
+
+**File:** `{path}` ({language})
+
+**Content:**
+```{language}
+{content}
+```
+
+Generate a concise summary covering the file's purpose and contents."""
+
+        return prompt
+
+    async def generate_repository_overview(self, repo_id: str) -> Optional[str]:
+        """
+        Generate high-level repository overview by aggregating file summaries.
+
+        Runs automatically after all file summaries are generated.
+        Creates a 4-5 paragraph overview covering purpose, architecture, tech stack,
+        entry points, and critical issues.
+
+        Args:
+            repo_id: Repository ID
+
+        Returns:
+            Repository overview string, or None if failed
+        """
+        try:
+            print(f"\n📋 Generating repository overview for repo {repo_id}...")
+
+            # Fetch all files with summaries
+            files = await self.file_service.get_files_by_repo(repo_id)
+            files_with_summaries = [f for f in files if f.get('summary')]
+
+            if not files_with_summaries:
+                print(f"⚠️  No file summaries found for repo overview")
+                return None
+
+            print(f"📦 Aggregating {len(files_with_summaries)} file summaries...")
+
+            # Build prompt with file summaries
+            prompt = self._build_repository_overview_prompt(files_with_summaries)
+
+            # Generate overview using LLM
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are a senior software architect. Generate a comprehensive repository overview.
+
+Create a 4-5 paragraph overview covering:
+1. **Purpose & Scope**: What does this repository do? What problems does it solve?
+2. **Architecture & Components**: Main modules, how they interact, design patterns
+3. **Tech Stack**: Languages, frameworks, key libraries
+4. **Entry Points**: Where to start reading the code (main files, important modules)
+5. **Notable Concerns**: Critical security/performance/scalability issues across the codebase
+
+Write in clear, professional language. Focus on helping new developers understand the codebase quickly."""
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=8192  # Large limit for comprehensive overview
+            )
+
+            # Check if response has content
+            if not response.choices or not response.choices[0].message.content:
+                print(f"  ⚠️  Empty response from AI provider")
+                return None
+
+            overview = response.choices[0].message.content.strip()
+
+            print(f"✅ Repository overview generated ({len(overview)} chars)")
+            return overview
+
+        except Exception as e:
+            print(f"❌ Error generating repository overview: {e}")
+            return None
+
+    def _build_repository_overview_prompt(self, files_with_summaries: List[Dict]) -> str:
+        """
+        Build prompt for repository overview generation.
+
+        Prioritizes important files:
+        1. README files (always included)
+        2. Entry point files (main.py, index.js, etc.)
+        3. Files with most functions/classes (most important code)
+
+        Args:
+            files_with_summaries: List of file documents with summaries
+
+        Returns:
+            Formatted prompt string
+        """
+        # Group files by language
+        files_by_language = {}
+        for file in files_with_summaries:
+            lang = file.get('language', 'unknown')
+            if lang not in files_by_language:
+                files_by_language[lang] = []
+            files_by_language[lang].append(file)
+
+        # Prioritize files
+        priority_files = []
+        other_files = []
+
+        # Entry point patterns
+        entry_point_patterns = ['main.', 'index.', 'app.', 'server.', '__init__.py', '__main__.py']
+
+        for file in files_with_summaries:
+            path = file['path'].lower()
+            filename = path.split('/')[-1]
+
+            # Priority 1: README files (MUST include)
+            if 'readme' in filename:
+                priority_files.insert(0, file)  # Add to front
+            # Priority 2: Entry points
+            elif any(pattern in filename for pattern in entry_point_patterns):
+                priority_files.append(file)
+            else:
+                other_files.append(file)
+
+        # Sort other files by importance (function + class count)
+        other_files.sort(
+            key=lambda f: len(f.get('functions', [])) + len(f.get('classes', [])),
+            reverse=True
+        )
+
+        # Take top 100 files total (README + entry points + most important)
+        selected_files = (priority_files + other_files)[:100]
+
+        # Build file summary list
+        file_summaries = []
+        for file in selected_files:
+            path = file['path']
+            summary = file.get('summary', '')
+            file_summaries.append(f"**{path}**\n{summary}\n")
+
+        prompt = f"""Analyze this repository based on {len(files_with_summaries)} file summaries.
+
+**Languages in repository:**
+{', '.join([f"{lang} ({len(files)})" for lang, files in files_by_language.items()])}
+
+**File Summaries:**
+
+{chr(10).join(file_summaries)}
+
+Generate a comprehensive repository overview covering:
+1. Overall purpose and what it does
+2. Architecture and main components
+3. Tech stack and key dependencies
+4. Entry points for new developers
+5. Critical issues or concerns across the codebase"""
 
         return prompt
