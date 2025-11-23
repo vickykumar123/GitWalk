@@ -37,3 +37,45 @@ async def get_task_status(task_id: str):
 async def get_repository_files(repo_id: str, limit: int = 50):
     """Get files for a repository with dependency information"""
     return await controller.get_files(repo_id, limit)
+
+@router.get("/{repo_id}/dependency-graph", response_model=dict)
+async def get_dependency_graph(repo_id: str):
+    """
+    Get dependency graph for D3.js visualization.
+
+    Returns nodes (files) and edges (dependencies) for visualizing
+    the repository's dependency structure.
+
+    **Response:**
+    ```json
+    {
+      "repo_id": "repo-xxx",
+      "nodes": [
+        {
+          "id": "file-uuid",
+          "path": "src/app.ts",
+          "filename": "app.ts",
+          "language": "typescript",
+          "functions": ["parseCommand", "handleInput"],
+          "classes": ["RedisParser"],
+          "has_external_dependencies": true
+        }
+      ],
+      "edges": [
+        {
+          "source": "file-uuid-1",
+          "target": "file-uuid-2",
+          "type": "imports"
+        }
+      ],
+      "total_nodes": 45,
+      "total_edges": 67
+    }
+    ```
+
+    **Example:**
+    ```
+    GET /api/repositories/repo-123/dependency-graph
+    ```
+    """
+    return await controller.get_dependency_graph(repo_id)

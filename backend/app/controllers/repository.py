@@ -327,3 +327,103 @@ class RepositoryController:
             "total_files": len(formatted_files),
             "files": formatted_files
         }
+
+    async def get_dependency_graph(self, repo_id: str) -> dict:
+        """
+        Get dependency graph data for D3.js visualization.
+
+        Returns nodes (files) and edges (dependencies) in a format suitable
+        for graph visualization on the frontend.
+
+        Args:
+            repo_id: Repository ID
+
+        Returns:
+            Dictionary with 'nodes' and 'edges' arrays:
+            {
+                "nodes": [
+                    {
+                        "id": "file-uuid",
+                        "path": "src/app.ts",
+                        "filename": "app.ts",
+                        "language": "typescript",
+                        "functions": ["parseCommand", "handleInput"],
+                        "classes": ["RedisParser"],
+                        "has_external_dependencies": true
+                    }
+                ],
+                "edges": [
+                    {
+                        "source": "file-uuid-1",
+                        "target": "file-uuid-2",
+                        "type": "imports"
+                    }
+                ]
+            }
+        """
+        # Fetch ALL files for the repository (using high limit for complete graph)
+        files = await self.file_service.get_files_by_repo(repo_id, limit=10000)
+
+        if not files:
+            raise HTTPException(status_code=404, detail="No files found for this repository")
+
+        # Build nodes array
+        nodes = []
+        file_id_to_path = {}  # Map file_id to path for edge building
+        path_to_file_id = {}  # Map path to file_id for dependency resolution
+
+        for file in files:
+            file_id = file["file_id"]
+            file_path = file["path"]
+
+            # Store mappings for edge building
+            file_id_to_path[file_id] = file_path
+            path_to_file_id[file_path] = file_id
+
+            # Extract function names
+            function_names = [func.get("name") for func in file.get("functions", [])]
+
+            # Extract class names
+            class_names = [cls.get("name") for cls in file.get("classes", [])]
+
+            # Check if file has external dependencies
+            external_imports = file.get("dependencies", {}).get("external_imports", [])
+            has_external_dependencies = len(external_imports) > 0
+
+            nodes.append({
+                "id": file_id,
+                "path": file_path,
+                "filename": file.get("filename", ""),
+                "language": file.get("language", ""),
+                "functions": function_names,
+                "classes": class_names,
+                "has_external_dependencies": has_external_dependencies
+            })
+
+        # Build edges array from internal dependencies
+        edges = []
+
+        for file in files:
+            source_file_id = file["file_id"]
+
+            # Get internal imports (files this file depends on)
+            internal_imports = file.get("dependencies", {}).get("imports", [])
+
+            for imported_path in internal_imports:
+                # Find the target file_id from the imported path
+                target_file_id = path_to_file_id.get(imported_path)
+
+                if target_file_id:
+                    edges.append({
+                        "source": source_file_id,
+                        "target": target_file_id,
+                        "type": "imports"
+                    })
+
+        return {
+            "repo_id": repo_id,
+            "nodes": nodes,
+            "edges": edges,
+            "total_nodes": len(nodes),
+            "total_edges": len(edges)
+        }
