@@ -73,13 +73,13 @@ class VectorSearchService:
 
             print(f"✅ Query embedded ({len(query_embedding)} dimensions)")
 
-            # 1. Search file summaries (top 1)
-            print(f"\n📄 Searching file summaries (top 1)...")
+            # 1. Search file summaries (top 2)
+            print(f"\n📄 Searching file summaries (top 2)...")
             summary_results = await self._vector_search(
                 repo_id=repo_id,
                 query=query,
                 query_embedding=query_embedding,
-                top_k=1,  # Only top 1 file
+                top_k=2,  # Top 2 files
                 search_type="summary"
             )
 
@@ -94,31 +94,60 @@ class VectorSearchService:
             )
 
             # 3. Merge results: summary + code
-            merged_results = []
+            # Combine all results first
+            all_results = summary_results + code_results
 
-            # Add top summary result
-            for result in summary_results:
-                result['search_type'] = 'summary'
-                result['context_type'] = 'file_summary'
-                merged_results.append(result)
+            # 4. Group by file_id to avoid duplicate summaries
+            files_map = {}  # file_id -> file info with code elements
 
-            # Add top code results (with file summaries)
-            for result in code_results:
-                result['search_type'] = 'code'
-                result['context_type'] = 'code_with_summary'
-                # File summary is already included in result
-                merged_results.append(result)
+            for result in all_results:
+                file_id = result.get('file_id')
 
-            print(f"\n✅ Merged {len(merged_results)} results (1 summary + 2 code):")
-            for i, result in enumerate(merged_results, 1):
-                ctx_type = result['context_type']
-                score = result['similarity_score']
-                if ctx_type == 'file_summary':
-                    print(f"   {i}. [FILE] {result['file_path']} - Score: {score:.4f}")
+                # Initialize file entry if not exists
+                if file_id not in files_map:
+                    files_map[file_id] = {
+                        'file_id': file_id,
+                        'file_path': result.get('file_path'),
+                        'file_language': result.get('file_language', 'unknown'),
+                        'file_summary': result.get('file_summary', ''),
+                        'similarity_score': result.get('similarity_score', 0),  # Highest score for this file
+                        'code_elements': []
+                    }
+
+                # If this is a code result, add it to code_elements
+                if result.get('embedding_type') != 'summary':
+                    code_element = {
+                        'type': result.get('embedding_type'),
+                        'name': result.get('name'),
+                        'code': result.get('code'),
+                        'text': result.get('text'),
+                        'line_start': result.get('line_start'),
+                        'line_end': result.get('line_end'),
+                        'parent_class': result.get('parent_class'),
+                        'chunk_index': result.get('chunk_index'),
+                        'total_chunks': result.get('total_chunks'),
+                        'similarity_score': result.get('similarity_score', 0)
+                    }
+                    files_map[file_id]['code_elements'].append(code_element)
+
+                    # Update file score if this code element has higher score
+                    if result.get('similarity_score', 0) > files_map[file_id]['similarity_score']:
+                        files_map[file_id]['similarity_score'] = result.get('similarity_score', 0)
+
+            # Convert to list and sort by score
+            merged_results = list(files_map.values())
+            merged_results.sort(key=lambda x: x['similarity_score'], reverse=True)
+
+            print(f"\n✅ Merged into {len(merged_results)} unique file(s):")
+            for i, file_result in enumerate(merged_results, 1):
+                code_count = len(file_result['code_elements'])
+                score = file_result['similarity_score']
+                if code_count > 0:
+                    print(f"   {i}. [FILE] {file_result['file_path']} - Score: {score:.4f}")
+                    for j, code_elem in enumerate(file_result['code_elements'], 1):
+                        print(f"      {j}. {code_elem['type']}: {code_elem['name']} (lines {code_elem['line_start']}-{code_elem['line_end']}) - Score: {code_elem['similarity_score']:.4f}")
                 else:
-                    emb_type = result.get('embedding_type', 'unknown')
-                    name = result.get('name', 'N/A')
-                    print(f"   {i}. [CODE] {result['file_path']} ({emb_type}: {name}) - Score: {score:.4f}")
+                    print(f"   {i}. [FILE] {file_result['file_path']} - Score: {score:.4f} (summary only)")
 
             return merged_results
 

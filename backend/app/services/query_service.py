@@ -16,6 +16,8 @@ import re
 from openai import AsyncOpenAI
 
 from app.services.vector_search_service import VectorSearchService
+from app.services.conversation_service import ConversationService
+from app.services.message_service import MessageService
 from app.config.providers import ProviderConfig
 from app.config.settings import settings
 
@@ -67,8 +69,10 @@ class QueryService:
 
         print(f"✅ Query Service initialized: {self.provider} ({self.model})")
 
-        # Initialize vector search service
+        # Initialize services
         self.vector_search = VectorSearchService(api_key)
+        self.conversation_service = ConversationService()
+        self.message_service = MessageService()
 
     def _get_default_model(self, provider: str) -> str:
         """Get default model for query/chat"""
@@ -190,9 +194,9 @@ class QueryService:
 
     async def stream_query(
         self,
+        session_id: str,
         repo_id: str,
-        user_query: str,
-        conversation_history: Optional[List[Dict]] = None
+        user_query: str
     ) -> AsyncGenerator[Dict, None]:
         """
         Process user query with LLM tool calling (STREAMING).
@@ -204,9 +208,9 @@ class QueryService:
         4. Done event (final sources + tool_calls)
 
         Args:
+            session_id: Session ID
             repo_id: Repository ID
             user_query: User's question
-            conversation_history: Previous messages (optional)
 
         Yields:
             Event dictionaries:
@@ -218,18 +222,8 @@ class QueryService:
         try:
             print(f"\n💬 Query: '{user_query}'")
 
-            # Build messages
-            messages = conversation_history or []
-            messages.append({
-                "role": "user",
-                "content": user_query
-            })
-
-            # Add system message if first message
-            if not conversation_history:
-                system_message = {
-                    "role": "system",
-                    "content": f"""You are a helpful code analysis assistant. You help developers understand codebases by answering questions about code.
+            # System prompt template
+            system_prompt = f"""You are a helpful code analysis assistant. You help developers understand codebases by answering questions about code.
 
 You have access to 4 tools to search and retrieve code:
 1. search_code - Search files using hybrid scoring (semantic + keyword matching). Works for ANY query: implementations, features, security issues, file characteristics, etc.
@@ -258,8 +252,42 @@ After receiving tool results, provide a natural language answer to the user's qu
 
 Current repository ID: {repo_id}
 """
-                }
-                messages.insert(0, system_message)
+
+            # Load or create conversation
+            conversation = await self.conversation_service.find_or_create(
+                session_id=session_id,
+                repo_id=repo_id,
+                system_prompt=system_prompt,
+                title=user_query[:50] + "..." if len(user_query) > 50 else user_query
+            )
+
+            conversation_id = conversation.conversation_id
+            print(f"📝 Using conversation: {conversation_id}")
+
+            # Load recent messages (last 20 messages = 10 exchanges)
+            recent_messages = await self.message_service.get_recent_messages_openai_format(
+                conversation_id=conversation_id,
+                limit=20
+            )
+
+            print(f"📚 Loaded {len(recent_messages)} previous messages")
+
+            # Build context: system message + recent messages + new user query
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(recent_messages)
+            messages.append({
+                "role": "user",
+                "content": user_query
+            })
+
+            # Save user message to database
+            user_sequence = await self.message_service.get_next_sequence_number(conversation_id)
+            await self.message_service.create(
+                conversation_id=conversation_id,
+                role="user",
+                content=user_query,
+                sequence_number=user_sequence
+            )
 
             # Get tool definitions
             tools = self._get_tool_definitions()
@@ -445,6 +473,25 @@ Current repository ID: {repo_id}
 
                 # No tool calls - this is the final answer
                 print(f"✅ Final answer complete")
+
+                # Save assistant message to database
+                if full_answer:
+                    assistant_sequence = await self.message_service.get_next_sequence_number(conversation_id)
+                    await self.message_service.create(
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=full_answer,
+                        sequence_number=assistant_sequence,
+                        tool_calls=collected_tool_calls if collected_tool_calls else None
+                    )
+
+                    # Update conversation metadata
+                    await self.conversation_service.increment_message_count(
+                        conversation_id=conversation_id,
+                        increment=2  # user + assistant
+                    )
+
+                    print(f"💾 Saved conversation history ({assistant_sequence} messages)")
 
                 # Print full aggregated answer to console
                 if full_answer:

@@ -5,7 +5,7 @@ Endpoints:
 - POST /api/query - Process user query with RAG (streaming)
 """
 
-from typing import Optional, List, Dict, AsyncGenerator
+from typing import Optional, AsyncGenerator
 from pydantic import BaseModel
 import json
 
@@ -19,7 +19,6 @@ class QueryRequest(BaseModel):
     session_id: str
     repo_id: str
     query: str
-    conversation_history: Optional[List[Dict]] = None
 
 
 class QueryController:
@@ -93,9 +92,9 @@ class QueryController:
 
             # Stream query events
             async for event in query_service.stream_query(
+                session_id=request.session_id,
                 repo_id=request.repo_id,
-                user_query=request.query,
-                conversation_history=request.conversation_history
+                user_query=request.query
             ):
                 # Format as Server-Sent Event
                 yield f"data: {json.dumps(event)}\n\n"

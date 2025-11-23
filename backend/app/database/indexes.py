@@ -44,6 +44,21 @@ async def create_indexes():
     await sessions_collection.create_index("session_id", unique=True)
     print("  ✅ Sessions indexes created")
 
+    # Conversations collection indexes
+    conversations_collection = database["conversations"]
+    await conversations_collection.create_index("conversation_id", unique=True)
+    await conversations_collection.create_index([("session_id", 1), ("repo_id", 1)], unique=True)  # One conversation per (session, repo)
+    await conversations_collection.create_index("updated_at")  # For sorting by recency
+    print("  ✅ Conversations indexes created")
+
+    # Messages collection indexes
+    messages_collection = database["messages"]
+    await messages_collection.create_index("message_id", unique=True)
+    await messages_collection.create_index("conversation_id")  # Frequently queried
+    await messages_collection.create_index([("conversation_id", 1), ("sequence_number", 1)])  # For ordered retrieval
+    await messages_collection.create_index("timestamp")  # For cleanup/sorting
+    print("  ✅ Messages indexes created")
+
     print("✅ All indexes created successfully!\n")
 
 
