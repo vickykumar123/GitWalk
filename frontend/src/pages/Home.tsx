@@ -4,9 +4,10 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useInitializeSession, getSessionIdFromStorage, useUpdateSessionPreferences } from "@/hooks/query/session";
+import { useInitializeSession, useUpdateSessionPreferences } from "@/hooks/query/session";
 import { useCreateRepository } from "@/hooks/query/repository";
 import { AI_PROVIDERS, getModelsForProvider, getDefaultModel } from "@/utils/providers";
+import { getSessionIdFromStorage, saveApiKeyToStorage } from "@/utils/storage";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -67,8 +68,12 @@ export default function Home() {
     try {
       console.log("🚀 Starting repository submission...");
 
-      // Step 1: Update session preferences with provider/model
-      console.log("1️⃣ Updating session preferences...");
+      // Step 1: Save API key to localStorage for future queries
+      console.log("1️⃣ Saving API key to localStorage...");
+      saveApiKeyToStorage(apiKey);
+
+      // Step 2: Update session preferences with provider/model
+      console.log("2️⃣ Updating session preferences...");
       await updateSessionPreferences({
         session_id: sessionId,
         ai_provider: provider,
@@ -76,8 +81,8 @@ export default function Home() {
         theme: "dark",
       });
 
-      // Step 2: Create repository with API key
-      console.log("2️⃣ Creating repository...");
+      // Step 3: Create repository with API key
+      console.log("3️⃣ Creating repository...");
       const response = await createRepository({
         github_url: githubUrl,
         session_id: sessionId,
@@ -86,7 +91,7 @@ export default function Home() {
 
       console.log("✅ Repository created successfully:", response);
 
-      // Step 3: Navigate to Explorer page
+      // Step 4: Navigate to Explorer page
       navigate(`/explorer/${response.repo_id}`);
     } catch (err) {
       console.error("❌ Failed to create repository:", err);

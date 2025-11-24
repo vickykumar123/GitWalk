@@ -3,7 +3,7 @@
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { getSessionIdFromStorage } from "@/hooks/query/session";
+import { getSessionIdFromStorage } from "@/utils/storage";
 import Home from "@/pages/Home";
 import Explorer from "@/pages/Explorer";
 import Graph from "@/pages/Graph";

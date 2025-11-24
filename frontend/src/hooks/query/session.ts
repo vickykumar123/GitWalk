@@ -2,24 +2,14 @@
  * Session Query Hooks
  */
 
-import { apiFetch } from "@/services/api";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Session } from "@/types";
-import { STORAGE_KEYS } from "@/utils/constants";
-
-// ==================== Storage Helpers ====================
-
-export function getSessionIdFromStorage(): string | null {
-  return localStorage.getItem(STORAGE_KEYS.SESSION_ID);
-}
-
-export function saveSessionIdToStorage(sessionId: string): void {
-  localStorage.setItem(STORAGE_KEYS.SESSION_ID, sessionId);
-}
-
-export function clearSessionFromStorage(): void {
-  localStorage.removeItem(STORAGE_KEYS.SESSION_ID);
-}
+import {apiFetch} from "@/services/api";
+import {useMutation, useQuery} from "@tanstack/react-query";
+import type {Session} from "@/types";
+import {
+  getSessionIdFromStorage,
+  saveSessionIdToStorage,
+  clearSessionFromStorage,
+} from "@/utils/storage";
 
 // ==================== useCreateSession ====================
 
@@ -30,7 +20,7 @@ export function useCreateSession() {
     });
   };
 
-  const { mutateAsync: createSession, isPending } = useMutation({
+  const {mutateAsync: createSession, isPending} = useMutation({
     mutationFn: postCreateSession,
     onSuccess: (session) => {
       // Save session_id to localStorage
@@ -39,7 +29,7 @@ export function useCreateSession() {
     },
   });
 
-  return { createSession, isPending };
+  return {createSession, isPending};
 }
 
 // ==================== useGetSession ====================
@@ -61,7 +51,7 @@ export function useGetSession(sessionId: string | null) {
     enabled: !!sessionId, // Only fetch if sessionId exists
   });
 
-  return { session, isLoading, refetch };
+  return {session, isLoading, refetch};
 }
 
 // ==================== useInitializeSession ====================
@@ -71,7 +61,7 @@ export function useGetSession(sessionId: string | null) {
  * Checks localStorage first, creates new if not found
  */
 export function useInitializeSession() {
-  const { createSession } = useCreateSession();
+  const {createSession} = useCreateSession();
 
   const initializeSession = async (): Promise<Session> => {
     // Check localStorage first
@@ -82,7 +72,7 @@ export function useInitializeSession() {
         console.log("📦 Found existing session ID:", existingSessionId);
         const session = await apiFetch<Session>(
           `/api/sessions/${existingSessionId}`,
-          { method: "GET" }
+          {method: "GET"}
         );
         console.log("✅ Session loaded successfully");
         return session;
@@ -105,7 +95,7 @@ export function useInitializeSession() {
     mutationFn: initializeSession,
   });
 
-  return { initSession, isPending, isSuccess };
+  return {initSession, isPending, isSuccess};
 }
 
 // ==================== useUpdateSessionPreferences ====================
@@ -123,7 +113,7 @@ export function useUpdateSessionPreferences() {
   const updatePreferences = async (
     request: UpdatePreferencesRequest
   ): Promise<Session> => {
-    const { session_id, ...preferences } = request;
+    const {session_id, ...preferences} = request;
 
     return apiFetch(`/api/sessions/${session_id}/preferences`, {
       method: "PATCH",
@@ -146,5 +136,5 @@ export function useUpdateSessionPreferences() {
     },
   });
 
-  return { updateSessionPreferences, isPending, isError, error };
+  return {updateSessionPreferences, isPending, isError, error};
 }

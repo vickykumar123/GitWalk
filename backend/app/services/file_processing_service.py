@@ -48,7 +48,10 @@ class FileProcessingService:
             api_key: API key from X-API-Key header
         """
         try:
-            print(f"\n🚀 Starting file processing for repo {repo_id} \n")
+            # Debug: Log API key receipt (masked)
+            api_key_preview = api_key[:10] + "..." if api_key else "None"
+            print(f"\n🚀 Starting file processing for repo {repo_id}")
+            print(f"🔑 API Key received: {api_key_preview}\n")
 
             # Fetch session to get provider and model preferences
             database = db.get_database()
@@ -81,7 +84,20 @@ class FileProcessingService:
                         raise ValueError(f"Session preferences not set. Please configure AI provider and model.")
 
             # Initialize AI and Embedding services with API key and session preferences
+            print(f"🔧 Initializing AI Service with provider={provider}, model={model}", flush=True)
+            print(f"🔧 api_key type before AIService: {type(api_key)}, value: {api_key[:10] + '...' if api_key else 'None'}", flush=True)
+
             ai_service = AIService(api_key=api_key, provider=provider, model=model)
+
+            # Verify API key is still present after AIService init
+            print("🔧 CHECKPOINT 1: Reached line after AIService init", flush=True)
+            print(f"🔧 api_key value: {repr(api_key)}", flush=True)
+            print(f"🔧 api_key type after AIService: {type(api_key)}, is None: {api_key is None}", flush=True)
+            api_key_check = api_key[:10] + "..." if api_key else "None"
+            print(f"✅ After AI Service init, api_key is: {api_key_check}", flush=True)
+
+            print(f"🔧 Initializing Embedding Service with api_key={'present' if api_key else 'None'}", flush=True)
+            print(f"🔧 USE_CODEBERT setting: {settings.use_codebert}", flush=True)
             embedding_service = EmbeddingService(api_key=api_key)
 
             # step 1: Get repository document

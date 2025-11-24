@@ -62,7 +62,8 @@ class AIService:
 
         # Services
         self.file_service = FileService()
-        self.embedding_service = EmbeddingService()
+        # Don't initialize EmbeddingService here - it's created separately in file_processing_service
+        # self.embedding_service = EmbeddingService()
 
     def _get_default_model(self, provider: str) -> str:
         """Get default model for summary generation"""

@@ -46,6 +46,10 @@ class RepositoryController:
           """
           try:
               # 0. Validate API key
+              # Debug: Log API key receipt (masked)
+              api_key_preview = api_key[:10] + "..." if api_key else "None"
+              print(f"\n🔑 API Key from header: {api_key_preview}")
+
               # Check if API key is available
               if not api_key:
                   # Try to get from environment (development only)
@@ -134,6 +138,8 @@ class RepositoryController:
               await self.repository_service.update_task_id(repo_id, task_id)
 
               # ✅ TRIGGER BACKGROUND PROCESSING
+              api_key_preview_bg = api_key[:10] + "..." if api_key else "None"
+              print(f"🔑 Passing API key to background task: {api_key_preview_bg}")
               background_tasks.add_task(
                   self.file_processing_service.process_repository_files,
                   repo_id=repo_id,

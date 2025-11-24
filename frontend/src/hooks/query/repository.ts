@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/services/api";
 import type { Repository } from "@/types";
 
@@ -60,19 +60,58 @@ export function useCreateRepository() {
 
 // ==================== Get Repository ====================
 
-export function useGetRepository(repoId: string) {
+/**
+ * Hook to fetch repository status and info.
+ *
+ * Use this on Explorer page to:
+ * - Check if repository is still processing
+ * - Get task_id for polling
+ * - Show repository metadata
+ *
+ * Supports page reload - will fetch fresh data on mount.
+ */
+export function useGetRepository(repoId: string | undefined) {
   const getRepository = async (): Promise<Repository> => {
+    if (!repoId) {
+      throw new Error("Repository ID is required");
+    }
+
     return apiFetch(`/api/repositories/${repoId}`, {
       method: "GET",
     });
   };
 
-  // Using useMutation for manual fetching (can convert to useQuery later if needed)
-  const { mutateAsync: fetchRepository, isPending } = useMutation({
-    mutationFn: getRepository,
+  const {
+    data: repository,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["repository", repoId],
+    queryFn: getRepository,
+    enabled: !!repoId, // Only fetch if repoId exists
+    refetchOnWindowFocus: true, // Refetch when tab regains focus
+    refetchOnMount: 'always', // Always fetch fresh data when component mounts
+    staleTime: 0, // Don't use stale data - always fetch latest status
   });
 
-  return { fetchRepository, isPending };
+  // Helper flags
+  // Treat both "fetched" and "processing" as processing state
+  const isProcessing = repository?.status === "processing" || repository?.status === "fetched";
+  const isCompleted = repository?.status === "completed";
+  const isFailed = repository?.status === "failed";
+
+  return {
+    repository,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isProcessing,
+    isCompleted,
+    isFailed,
+  };
 }
 
 // ==================== Get Task Status ====================

@@ -37,6 +37,11 @@ class EmbeddingService:
         Args:
             api_key: API key for provider embeddings (required if USE_CODEBERT=false)
         """
+        # Debug logging
+        api_key_preview = api_key[:10] + "..." if api_key else "None"
+        print(f"🔍 EmbeddingService.__init__ called with api_key={api_key_preview}")
+        print(f"🔍 USE_CODEBERT={settings.use_codebert}, ENV={settings.env}")
+
         self.file_service = FileService()
         self.use_codebert = settings.use_codebert
         self.embedding_dimension = 768
@@ -49,14 +54,21 @@ class EmbeddingService:
         else:
             # Use provider's embedding API
             # In development, fall back to .env if no API key provided
+            print(f"🔍 Checking API key availability...")
             if not api_key:
+                print(f"🔍 No API key provided, checking fallback (ENV={settings.env})")
                 if settings.env == "development":
                     api_key = settings.ai_api_key
                     if api_key:
                         print("ℹ️  Using AI_API_KEY from .env for embeddings (development mode)")
+                else:
+                    print(f"🔍 ENV is not 'development', no fallback available")
 
             if not api_key:
+                print("❌ No API key available, raising error")
                 raise ValueError("API key required for provider embeddings (USE_CODEBERT=false)")
+
+            print(f"✅ API key validated for provider embeddings")
 
             self.model = None
             self.provider = settings.ai_provider or "openai"
