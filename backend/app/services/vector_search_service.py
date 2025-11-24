@@ -336,9 +336,26 @@ class VectorSearchService:
 
             results = await self.search_code(repo_id, search_query, top_k=1)
 
-            if results and results[0]['embedding_type'] == 'function':
-                print(f"✅ Found function via vector search")
-                return results[0]
+            # search_code returns merged results with code_elements array
+            if results and results[0].get('code_elements'):
+                # Look for a function in the code_elements
+                for code_elem in results[0]['code_elements']:
+                    if code_elem.get('type') == 'function':
+                        print(f"✅ Found function via vector search")
+                        # Reconstruct the result format
+                        return {
+                            'file_id': results[0]['file_id'],
+                            'file_path': results[0]['file_path'],
+                            'file_language': results[0]['file_language'],
+                            'file_summary': results[0]['file_summary'],
+                            'embedding_type': 'function',
+                            'name': code_elem['name'],
+                            'code': code_elem['code'],
+                            'line_start': code_elem['line_start'],
+                            'line_end': code_elem['line_end'],
+                            'parent_class': code_elem.get('parent_class'),
+                            'similarity_score': code_elem['similarity_score']
+                        }
 
             print(f"❌ Function not found: {function_name}")
             return None

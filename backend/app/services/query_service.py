@@ -109,30 +109,53 @@ class QueryService:
 
     def _get_tool_definitions(self) -> List[Dict]:
         """
-        Define all 4 tools for LLM function calling.
+        Define all 5 tools for LLM function calling.
 
         Tools:
-        1. search_code - Search file summaries using hybrid scoring (vector + keyword)
-        2. get_repo_overview - Get repository overview
-        3. get_file_by_path - Get specific file by path
-        4. find_function - Find function by name
+        1. search_code - Search both file summaries and code chunks
+        2. search_files - Search ONLY file summaries (for issues, security, performance)
+        3. get_repo_overview - Get repository overview
+        4. get_file_by_path - Get specific file by path
+        5. find_function - Find function by name
         """
         return [
             {
                 "type": "function",
                 "function": {
                     "name": "search_code",
-                    "description": "Search for relevant files using semantic similarity + keyword matching. Searches file-level summaries with hybrid scoring (vector + keyword + filename boost). Use this for ANY search query - works for implementations, features, security issues, file characteristics, etc. Examples: 'how does RDB parser work', 'files with security issues', 'authentication logic', 'configuration files'.",
+                    "description": "Search for specific code implementations (functions, classes) AND file summaries. Returns both code chunks and file summaries merged together. Use this when you need to see actual code implementations. Examples: 'how does RDB parser work', 'show me authentication logic', 'find HTTP request handlers'.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "Search query (e.g., 'RDB parser implementation', 'files with security issues', 'authentication logic')"
+                                "description": "Search query (e.g., 'RDB parser implementation', 'authentication logic', 'HTTP handlers')"
                             },
                             "top_k": {
                                 "type": "integer",
                                 "description": "Number of results to return (default 10)",
+                                "default": 10
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_files",
+                    "description": "Search ONLY file summaries (no code chunks). Best for finding files by characteristics, issues, or patterns. Use this for queries about security issues, performance problems, code quality, architecture patterns, or file characteristics. Returns top 10 file summaries by default. Examples: 'files with security issues', 'performance problems', 'files handling authentication', 'configuration files'.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query about file characteristics (e.g., 'security issues', 'performance problems', 'error handling')"
+                            },
+                            "top_k": {
+                                "type": "integer",
+                                "description": "Number of files to return (default 10)",
                                 "default": 10
                             }
                         },
@@ -225,28 +248,38 @@ class QueryService:
             # System prompt template
             system_prompt = f"""You are a helpful code analysis assistant. You help developers understand codebases by answering questions about code.
 
-You have access to 4 tools to search and retrieve code:
-1. search_code - Search files using hybrid scoring (semantic + keyword matching). Works for ANY query: implementations, features, security issues, file characteristics, etc.
-2. get_repo_overview - Get high-level repository overview
-3. get_file_by_path - Get specific file by path (e.g., /app/stream.ts)
-4. find_function - Find specific function by name
+You have access to 5 tools to search and retrieve code:
+1. search_code - Search for code implementations (functions, classes) + file summaries. Use when you need actual code.
+2. search_files - Search ONLY file summaries (no code). Use for finding files by characteristics: security issues, performance, patterns, etc.
+3. get_repo_overview - Get high-level repository overview
+4. get_file_by_path - Get specific file by path (e.g., /app/stream.ts)
+5. find_function - Find specific function by name
 
 Guidelines:
 - ALWAYS use tools to find relevant code before answering
+- You CAN and SHOULD use MULTIPLE tools in a single response if needed to fully answer the question
 - DO NOT answer without calling tools first - you must wait for tool results
-- After calling a tool, WAIT for the tool result before generating your answer
+- After calling tools, WAIT for all tool results before generating your answer
 - DO NOT make assumptions about code - only use information from tool results
-- For "how does X work" questions → use search_code
-- For "files with security issues" questions → use search_code
-- For "list files that..." questions → use search_code
+
+Tool selection:
+- For "how does X work" questions → use search_code (returns code + summaries)
+- For "files with security issues" → use search_files (returns only summaries)
+- For "files with performance problems" → use search_files
+- For "list files that..." questions → use search_files
 - For "what does this repo do" → use get_repo_overview
 - For "explain /path/to/file" → use get_file_by_path
 - For "show me function X" → use find_function
+- For complex questions → use MULTIPLE tools (e.g., search_code + get_file_by_path, or search_files + find_function)
+
+Answer format:
 - Cite file paths and line numbers in your answers
 - If code chunks are returned, explain what they do
 - Be concise but thorough
 
-IMPORTANT: You MUST call tools and wait for their results before answering. Never respond without tool results.
+IMPORTANT:
+- You MUST call tools and wait for their results before answering. Never respond without tool results.
+- You CAN call MULTIPLE tools to gather comprehensive information before answering.
 
 After receiving tool results, provide a natural language answer to the user's question. DO NOT generate more tool calls in text format - just answer the question based on the code you found.
 
@@ -564,6 +597,14 @@ Current repository ID: {repo_id}
         """
         if function_name == "search_code":
             results = await self.vector_search.search_code(
+                repo_id=repo_id,
+                query=function_args["query"],
+                top_k=function_args.get("top_k", 10)
+            )
+            return results
+
+        elif function_name == "search_files":
+            results = await self.vector_search.search_files(
                 repo_id=repo_id,
                 query=function_args["query"],
                 top_k=function_args.get("top_k", 10)
