@@ -289,6 +289,7 @@ class RepositoryController:
             file_count=repo_doc.get("file_count", 0),
             total_size_bytes=repo_doc.get("total_size_bytes", 0),
             languages_breakdown=repo_doc.get("languages_breakdown"),
+            file_tree=repo_doc.get("file_tree"),
             overview=repo_doc.get("overview"),
             overview_generated_at=repo_doc.get("overview_generated_at"),
             created_at=repo_doc["created_at"],

@@ -91,7 +91,7 @@ export function useGetRepository(repoId: string | undefined) {
     queryKey: ["repository", repoId],
     queryFn: getRepository,
     enabled: !!repoId, // Only fetch if repoId exists
-    refetchOnWindowFocus: true, // Refetch when tab regains focus
+    refetchOnWindowFocus: false, // Don't refetch when tab regains focus
     refetchOnMount: 'always', // Always fetch fresh data when component mounts
     staleTime: 0, // Don't use stale data - always fetch latest status
   });

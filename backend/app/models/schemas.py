@@ -193,6 +193,9 @@ class RepositoryResponse(BaseModel):
       total_size_bytes: int = 0
       languages_breakdown: Optional[dict] = None
 
+      # File tree structure
+      file_tree: Optional[dict] = Field(default=None, description="Nested file tree structure")
+
       # AI-generated content
       overview: Optional[str] = None
       overview_generated_at: Optional[datetime] = None
@@ -225,6 +228,13 @@ class RepositoryResponse(BaseModel):
                       "TypeScript": 320,
                       "JavaScript": 80,
                       "CSS": 30
+                  },
+                  "file_tree": {
+                      "type": "folder",
+                      "children": {
+                          "src": {"type": "folder", "children": {}},
+                          "README.md": {"type": "file", "path": "README.md"}
+                      }
                   },
                   "created_at": "2025-01-16T10:00:00Z",
                   "updated_at": "2025-01-16T10:05:00Z",

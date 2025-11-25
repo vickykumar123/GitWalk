@@ -44,6 +44,9 @@ export interface Repository {
   total_size_bytes: number;
   languages_breakdown?: Record<string, number> | null;
 
+  // File tree structure
+  file_tree?: FileTreeNode | null;
+
   // AI-generated content
   overview?: string | null;
   overview_generated_at?: string | null;

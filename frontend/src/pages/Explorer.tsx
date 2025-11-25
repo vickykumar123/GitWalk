@@ -4,13 +4,17 @@
  */
 
 import { useParams } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useGetRepository } from "@/hooks/query/repository";
 import { useTaskPolling } from "@/hooks/query/task";
 import ProgressUI from "@/components/ProgressUI";
+import { FileTree } from "@/components/file-tree";
 
 export default function Explorer() {
   const { repoId } = useParams<{ repoId: string }>();
+
+  // State for selected file in the tree
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
 
   // Step 1: Fetch repository status (runs on mount and reload)
   const { repository, isLoading, isError, error, isProcessing, isCompleted, isFailed, refetch } =
@@ -83,22 +87,29 @@ export default function Explorer() {
 
   // Completed state - Show file explorer
   if (isCompleted) {
+    // Debug: Check what file_tree looks like
+    
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
         {/* Layout: File Tree (25%) | Code Viewer + Summary (75%) */}
         <div className="flex h-screen">
           {/* Left Sidebar - File Tree */}
-          <div className="w-1/4 border-r border-[var(--border-color)] bg-[var(--bg-secondary)] p-4 overflow-auto">
-            <h2 className="text-lg font-semibold mb-4">Files</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              {repository?.full_name}
-              <br />
-              {repository?.file_count} files
-            </p>
-            <div className="mt-4">
+          <div className="w-1/4 border-r border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-auto">
+            {/* Header */}
+            <div className="p-4 border-b border-[var(--border-color)]">
+              <h2 className="text-lg font-semibold">{repository?.full_name}</h2>
               <p className="text-sm text-[var(--text-secondary)]">
-                GitHub-style file tree coming soon...
+                {repository?.file_count} files
               </p>
+            </div>
+
+            {/* File Tree */}
+            <div className="py-2">
+              <FileTree
+                tree={repository?.file_tree}
+                onFileSelect={setSelectedFilePath}
+                selectedPath={selectedFilePath}
+              />
             </div>
           </div>
 
@@ -106,20 +117,44 @@ export default function Explorer() {
           <div className="flex-1 flex flex-col">
             {/* Code Viewer */}
             <div className="flex-1 p-6 overflow-auto">
-              <h2 className="text-xl font-semibold mb-4">Code Preview</h2>
-              <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-4">
-                <p className="text-[var(--text-secondary)]">
-                  Select a file from the tree to view its contents with syntax highlighting
-                </p>
-              </div>
+              {selectedFilePath ? (
+                <>
+                  <h2 className="text-xl font-semibold mb-4 font-mono">
+                    {selectedFilePath}
+                  </h2>
+                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-4">
+                    <p className="text-[var(--text-secondary)]">
+                      Code viewer coming soon...
+                    </p>
+                    <p className="text-sm text-[var(--text-muted)] mt-2">
+                      Selected: {selectedFilePath}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-xl font-semibold mb-4">Code Preview</h2>
+                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-4">
+                    <p className="text-[var(--text-secondary)]">
+                      Select a file from the tree to view its contents with syntax highlighting
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* File Summary Section */}
             <div className="h-64 border-t border-[var(--border-color)] bg-[var(--bg-secondary)] p-6 overflow-auto">
               <h3 className="text-lg font-semibold mb-3">AI Summary</h3>
-              <p className="text-sm text-[var(--text-secondary)]">
-                AI-generated file summary will appear here when you select a file
-              </p>
+              {selectedFilePath ? (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  Loading summary for {selectedFilePath}...
+                </p>
+              ) : (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  AI-generated file summary will appear here when you select a file
+                </p>
+              )}
             </div>
           </div>
         </div>
