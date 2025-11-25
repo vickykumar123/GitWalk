@@ -7,7 +7,7 @@
  * 3. Sorting - Folders first, then files, alphabetically
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FileTreeNode as FileTreeNodeType } from "@/types";
 
 // ==================== Icons ====================
@@ -85,25 +85,40 @@ interface TreeNodeProps {
   name: string;
   node: FileTreeNodeType;
   depth: number;
+  currentPath: string; // Full path to this node (built during traversal)
   onFileSelect: (path: string) => void;
   selectedPath: string | null;
   disabled?: boolean; // When true, folders can expand but files can't be clicked
+  expandToPath?: string | null; // Path to auto-expand to (from graph click)
 }
 
-function TreeNode({ name, node, depth, onFileSelect, selectedPath, disabled }: TreeNodeProps) {
+function TreeNode({ name, node, depth, currentPath, onFileSelect, selectedPath, disabled, expandToPath }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false); // All collapsed initially
   const isFolder = node.type === "folder";
-  const isSelected = node.path === selectedPath;
+  // Use node.path for files (from backend) or currentPath for folders (built during traversal)
+  const nodePath = node.path || currentPath;
+  const isSelected = nodePath === selectedPath;
   const isFileDisabled = !isFolder && disabled;
+
+  // Auto-expand if this folder is in the path to expandToPath
+  useEffect(() => {
+    if (isFolder && expandToPath && currentPath) {
+      // Check if expandToPath starts with this folder's path
+      // e.g., if currentPath is "src" and expandToPath is "src/components/Button.tsx"
+      if (expandToPath.startsWith(currentPath + "/")) {
+        setIsExpanded(true);
+      }
+    }
+  }, [expandToPath, isFolder, currentPath]);
 
   // Handle click
   const handleClick = () => {
     if (isFolder) {
       // Folders can always expand/collapse
       setIsExpanded(!isExpanded);
-    } else if (node.path && !disabled) {
+    } else if (nodePath && !disabled) {
       // Files only clickable when not disabled
-      onFileSelect(node.path);
+      onFileSelect(nodePath);
     }
   };
 
@@ -130,7 +145,7 @@ function TreeNode({ name, node, depth, onFileSelect, selectedPath, disabled }: T
             ? "opacity-50 cursor-not-allowed"
             : "cursor-pointer hover:bg-[var(--bg-hover)]"
           }
-          ${isSelected ? "bg-[var(--bg-selected)] text-[var(--text-primary)]" : ""}
+          ${isSelected ? "bg-purple-500/20 text-purple-300 font-medium" : ""}
         `}
         style={{ paddingLeft: `${depth * 16 + 4}px` }}
       >
@@ -157,9 +172,11 @@ function TreeNode({ name, node, depth, onFileSelect, selectedPath, disabled }: T
               name={childName}
               node={childNode}
               depth={depth + 1}
+              currentPath={currentPath ? `${currentPath}/${childName}` : childName}
               onFileSelect={onFileSelect}
               selectedPath={selectedPath}
               disabled={disabled}
+              expandToPath={expandToPath}
             />
           ))}
         </div>
@@ -175,9 +192,10 @@ interface FileTreeProps {
   onFileSelect: (path: string) => void;
   selectedPath: string | null;
   disabled?: boolean; // When true, folders can expand but files can't be clicked
+  expandToPath?: string | null; // Path to auto-expand folders to (from graph click)
 }
 
-export default function FileTree({ tree, onFileSelect, selectedPath, disabled }: FileTreeProps) {
+export default function FileTree({ tree, onFileSelect, selectedPath, disabled, expandToPath }: FileTreeProps) {
   // Handle empty/null tree
   if (!tree || Object.keys(tree).length === 0) {
     return (
@@ -212,9 +230,11 @@ export default function FileTree({ tree, onFileSelect, selectedPath, disabled }:
           name={name}
           node={node}
           depth={0}
+          currentPath={name}
           onFileSelect={onFileSelect}
           selectedPath={selectedPath}
           disabled={disabled}
+          expandToPath={expandToPath}
         />
       ))}
     </div>

@@ -218,3 +218,67 @@ export function useGetFile(repoId: string | undefined, filePath: string | null) 
     refetch,
   };
 }
+
+// ==================== Get Dependency Graph ====================
+
+export interface GraphNode {
+  id: string;
+  path: string;
+  filename: string;
+  language: string;
+  functions: string[];
+  classes: string[];
+  has_external_dependencies: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface DependencyGraphData {
+  repo_id: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  total_nodes: number;
+  total_edges: number;
+}
+
+/**
+ * Hook to fetch dependency graph data for D3.js visualization.
+ *
+ * @param repoId - Repository ID
+ */
+export function useGetDependencyGraph(repoId: string | undefined) {
+  const getDependencyGraph = async (): Promise<DependencyGraphData> => {
+    if (!repoId) {
+      throw new Error("Repository ID is required");
+    }
+
+    return apiFetch(`/api/repositories/${repoId}/dependency-graph`, {
+      method: "GET",
+    });
+  };
+
+  const {
+    data: graph,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["dependency-graph", repoId],
+    queryFn: getDependencyGraph,
+    enabled: !!repoId,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes (graph rarely changes)
+  });
+
+  return {
+    graph,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  };
+}

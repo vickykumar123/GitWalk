@@ -5,12 +5,15 @@
 
 import {useParams} from "react-router-dom";
 import {useEffect, useState, useRef} from "react";
-import {useGetRepository, useGetFile} from "@/hooks/query/repository";
+import {useGetRepository, useGetFile, useGetDependencyGraph} from "@/hooks/query/repository";
 import {useTaskPolling} from "@/hooks/query/task";
 import {FileTree} from "@/components/file-tree";
+import {DependencyGraph} from "@/components/dependency-graph";
 import Markdown from "react-markdown";
 import {Prism as SyntaxHighlighter} from "react-syntax-highlighter";
 import {oneDark} from "react-syntax-highlighter/dist/esm/styles/prism";
+
+type ViewMode = "code" | "graph";
 
 // Format seconds to MM:SS
 function formatTime(seconds: number): string {
@@ -82,6 +85,9 @@ export default function Explorer() {
   // State for selected file in the tree
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
 
+  // State for view mode (code viewer vs dependency graph)
+  const [viewMode, setViewMode] = useState<ViewMode>("code");
+
   // Step 1: Fetch repository status (runs on mount and reload)
   const {
     repository,
@@ -123,6 +129,12 @@ export default function Explorer() {
     isLoading: isFileLoading,
     isError: isFileError,
   } = useGetFile(repoId, selectedFilePath);
+
+  // Step 2.6: Fetch dependency graph (only when graph view is active and completed)
+  const {
+    graph,
+    isLoading: isGraphLoading,
+  } = useGetDependencyGraph(isCompleted && viewMode === "graph" ? repoId : undefined);
 
   // Step 3: Refetch repository when task completes
   useEffect(() => {
@@ -279,13 +291,48 @@ export default function Explorer() {
             </div>
           </div>
 
-          {/* Status Badge */}
-          {isProcessing && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20">
-              <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-              <span className="text-xs font-medium text-yellow-500">Processing</span>
-            </div>
-          )}
+          {/* View Toggle + Status */}
+          <div className="flex items-center gap-4">
+            {/* View Mode Toggle - Only show when completed */}
+            {isCompleted && (
+              <div className="flex items-center bg-[var(--bg-primary)] rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("code")}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    viewMode === "code"
+                      ? "bg-purple-500/20 text-purple-400"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  Code
+                </button>
+                <button
+                  onClick={() => setViewMode("graph")}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    viewMode === "graph"
+                      ? "bg-purple-500/20 text-purple-400"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  Graph
+                </button>
+              </div>
+            )}
+
+            {/* Status Badge */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-500/10 border border-yellow-500/20">
+                <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                <span className="text-xs font-medium text-yellow-500">Processing</span>
+              </div>
+            )}
+          </div>
         </header>
 
         {/* Main Content */}
@@ -306,6 +353,7 @@ export default function Explorer() {
                 onFileSelect={setSelectedFilePath}
                 selectedPath={selectedFilePath}
                 disabled={isProcessing}
+                expandToPath={selectedFilePath}
               />
             </div>
           </aside>
@@ -353,6 +401,45 @@ export default function Explorer() {
                     Browse the file tree while we process your repository
                   </p>
                 </div>
+              </div>
+            ) : viewMode === "graph" ? (
+              // Show dependency graph
+              <div className="flex-1 overflow-hidden">
+                {isGraphLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full"></div>
+                      <span className="text-[var(--text-secondary)]">Loading dependency graph...</span>
+                    </div>
+                  </div>
+                ) : graph && graph.nodes.length > 0 ? (
+                  <DependencyGraph
+                    nodes={graph.nodes}
+                    edges={graph.edges}
+                    onNodeClick={(node) => {
+                      // Switch to code view and select the clicked file
+                      setSelectedFilePath(node.path);
+                      setViewMode("code");
+                    }}
+                    selectedNodeId={selectedFilePath ? graph.nodes.find(n => n.path === selectedFilePath)?.id : null}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 mx-auto rounded-2xl bg-[var(--bg-secondary)] flex items-center justify-center">
+                        <svg className="w-8 h-8 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-medium">No dependencies found</p>
+                        <p className="text-sm text-[var(--text-muted)]">
+                          This repository has no internal file dependencies
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               // Show code viewer when completed
