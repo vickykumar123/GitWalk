@@ -106,7 +106,9 @@ function TreeNode({ name, node, depth, currentPath, onFileSelect, selectedPath, 
       // Check if expandToPath starts with this folder's path
       // e.g., if currentPath is "src" and expandToPath is "src/components/Button.tsx"
       if (expandToPath.startsWith(currentPath + "/")) {
-        setIsExpanded(true);
+        // Defer setState to avoid synchronous cascading renders
+        const timeout = setTimeout(() => setIsExpanded(true), 0);
+        return () => clearTimeout(timeout);
       }
     }
   }, [expandToPath, isFolder, currentPath]);

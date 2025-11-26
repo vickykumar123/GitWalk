@@ -97,11 +97,11 @@ export default function DependencyGraph({
     svg.append("defs").append("marker")
       .attr("id", "arrowhead")
       .attr("viewBox", "-0 -5 10 10")
-      .attr("refX", 20)
+      .attr("refX", 28)
       .attr("refY", 0)
       .attr("orient", "auto")
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
+      .attr("markerWidth", 8)
+      .attr("markerHeight", 8)
       .append("path")
       .attr("d", "M 0,-5 L 10,0 L 0,5")
       .attr("fill", "#6b7280");
@@ -114,11 +114,12 @@ export default function DependencyGraph({
     const simulation = d3.forceSimulation(simulationNodes)
       .force("link", d3.forceLink<SimulationNode, SimulationEdge>(simulationEdges)
         .id((d) => d.id)
-        .distance(100)
+        .distance(180)
+        .strength(1.2)
       )
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("charge", d3.forceManyBody().strength(-100))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(30));
+      .force("collision", d3.forceCollide().radius(35));
 
     // Draw edges
     const link = g.append("g")
@@ -134,7 +135,7 @@ export default function DependencyGraph({
     // Draw nodes
     const node = g.append("g")
       .attr("class", "nodes")
-      .selectAll("g")
+      .selectAll<SVGGElement, SimulationNode>("g")
       .data(simulationNodes)
       .join("g")
       .attr("cursor", "pointer")
@@ -157,7 +158,7 @@ export default function DependencyGraph({
 
     // Node circles
     node.append("circle")
-      .attr("r", (d) => d.has_external_dependencies ? 12 : 10)
+      .attr("r", (d) => d.has_external_dependencies ? 18 : 14)
       .attr("fill", (d) => LANGUAGE_COLORS[d.language?.toLowerCase()] || LANGUAGE_COLORS.default)
       .attr("stroke", (d) => d.id === selectedNodeId ? "#fff" : "transparent")
       .attr("stroke-width", 2)
@@ -166,9 +167,9 @@ export default function DependencyGraph({
     // Node labels
     node.append("text")
       .text((d) => d.filename)
-      .attr("x", 15)
-      .attr("y", 4)
-      .attr("font-size", "11px")
+      .attr("x", 22)
+      .attr("y", 5)
+      .attr("font-size", "12px")
       .attr("fill", "#d1d5db")
       .attr("pointer-events", "none");
 
