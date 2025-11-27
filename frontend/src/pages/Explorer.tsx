@@ -92,6 +92,11 @@ export default function Explorer() {
   // State for chat panel
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // State for resizable panels
+  const [summaryHeight, setSummaryHeight] = useState(224); // Default 224px (h-56)
+  const summaryMinHeight = 100;
+  const summaryMaxHeight = 500;
+
   // Get sessionId from localStorage (key: "github_explorer_session_id")
   const sessionId = localStorage.getItem("github_explorer_session_id") || undefined;
 
@@ -570,7 +575,36 @@ export default function Explorer() {
                 </div>
 
                 {/* File Summary Panel */}
-                <div className="h-56 border-t border-[var(--border-color)] bg-[var(--bg-secondary)] flex flex-col shrink-0">
+                <div
+                  className="border-t border-[var(--border-color)] bg-[var(--bg-secondary)] flex flex-col shrink-0"
+                  style={{ height: `${summaryHeight}px` }}
+                >
+                  {/* Resize Handle */}
+                  <div
+                    className="h-1 cursor-ns-resize hover:bg-purple-500/50 transition-colors group flex items-center justify-center"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      const startY = e.clientY;
+                      const startHeight = summaryHeight;
+
+                      const handleMouseMove = (moveEvent: MouseEvent) => {
+                        const deltaY = startY - moveEvent.clientY;
+                        const newHeight = Math.min(summaryMaxHeight, Math.max(summaryMinHeight, startHeight + deltaY));
+                        setSummaryHeight(newHeight);
+                      };
+
+                      const handleMouseUp = () => {
+                        document.removeEventListener("mousemove", handleMouseMove);
+                        document.removeEventListener("mouseup", handleMouseUp);
+                      };
+
+                      document.addEventListener("mousemove", handleMouseMove);
+                      document.addEventListener("mouseup", handleMouseUp);
+                    }}
+                  >
+                    <div className="w-8 h-0.5 rounded-full bg-[var(--border-color)] group-hover:bg-purple-500/50" />
+                  </div>
+
                   {/* Panel Header */}
                   <div className="h-10 flex items-center px-4 border-b border-[var(--border-color)]">
                     <div className="flex items-center gap-2">

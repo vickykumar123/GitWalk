@@ -30,6 +30,9 @@ export default function ChatPanel({
   repoName,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [panelWidth, setPanelWidth] = useState(480); // Default 480px
+  const panelMinWidth = 320;
+  const panelMaxWidth = 800;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -104,14 +107,43 @@ export default function ChatPanel({
       {/* Slide-out Panel */}
       <div
         className={`
-          fixed top-0 right-0 h-full w-full max-w-lg bg-[var(--bg-primary)] z-50
+          fixed top-0 right-0 h-full bg-[var(--bg-primary)] z-50
           border-l border-[var(--border-color)] shadow-2xl
           transform transition-transform duration-300 ease-out
-          flex flex-col
+          flex
           ${isOpen ? "translate-x-0" : "translate-x-full"}
         `}
+        style={{ width: `${panelWidth}px` }}
       >
-        {/* Header */}
+        {/* Resize Handle */}
+        <div
+          className="w-1 h-full cursor-ew-resize hover:bg-purple-500/50 transition-colors flex items-center justify-center shrink-0"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startWidth = panelWidth;
+
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+              const deltaX = startX - moveEvent.clientX;
+              const newWidth = Math.min(panelMaxWidth, Math.max(panelMinWidth, startWidth + deltaX));
+              setPanelWidth(newWidth);
+            };
+
+            const handleMouseUp = () => {
+              document.removeEventListener("mousemove", handleMouseMove);
+              document.removeEventListener("mouseup", handleMouseUp);
+            };
+
+            document.addEventListener("mousemove", handleMouseMove);
+            document.addEventListener("mouseup", handleMouseUp);
+          }}
+        >
+          <div className="w-0.5 h-8 rounded-full bg-[var(--border-color)] hover:bg-purple-500/50" />
+        </div>
+
+        {/* Panel Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-[var(--border-color)] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
@@ -234,6 +266,7 @@ export default function ChatPanel({
           <p className="text-xs text-[var(--text-muted)] mt-2 text-center">
             Press Enter to send • Shift+Enter for new line
           </p>
+        </div>
         </div>
       </div>
     </>
