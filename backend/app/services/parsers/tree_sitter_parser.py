@@ -260,11 +260,11 @@ class TreeSitterParser(BaseParser):
         if file_path.endswith('.js'):
             return 'javascript'
         elif file_path.endswith('.jsx'):
-            return 'javascript'
+            return 'jsx'
         elif file_path.endswith('.ts'):
             return 'typescript'
         elif file_path.endswith('.tsx'):
-            return 'typescript'
+            return 'tsx'
         elif file_path.endswith('.go'):
             return 'go'
         elif file_path.endswith('.java'):
@@ -303,7 +303,9 @@ class TreeSitterParser(BaseParser):
         # Function node types by language
         function_types = {
             'javascript': ['function_declaration', 'method_definition', 'arrow_function'],
+            'jsx': ['function_declaration', 'method_definition', 'arrow_function'],
             'typescript': ['function_declaration', 'method_definition', 'arrow_function'],
+            'tsx': ['function_declaration', 'method_definition', 'arrow_function'],
             'go': ['function_declaration', 'method_declaration'],
             'java': ['method_declaration', 'constructor_declaration'],
             'rust': ['function_item'],
@@ -320,6 +322,14 @@ class TreeSitterParser(BaseParser):
             is_method = parent_class is not None
 
             func_name = self._extract_node_name(node, code)
+
+            # Skip anonymous functions (inline callbacks like .map(() => ...))
+            if func_name == "anonymous":
+                # Recurse into children to find nested named functions
+                for child in node.children:
+                    self._traverse_functions(child, code, language, functions, class_ranges)
+                return
+
             params = self._extract_method_params(node, code, language)
 
             # Generate signature
@@ -351,7 +361,9 @@ class TreeSitterParser(BaseParser):
         """Recursively traverse tree to find classes and extract nested methods"""
         class_types = {
             'javascript': ['class_declaration'],
+            'jsx': ['class_declaration'],
             'typescript': ['class_declaration', 'interface_declaration'],
+            'tsx': ['class_declaration', 'interface_declaration'],
             'go': ['type_declaration'],
             'java': ['class_declaration', 'interface_declaration'],
             'rust': ['struct_item', 'enum_item', 'trait_item'],
@@ -363,7 +375,9 @@ class TreeSitterParser(BaseParser):
         # Method node types by language
         method_types = {
             'javascript': ['method_definition'],
+            'jsx': ['method_definition'],
             'typescript': ['method_definition', 'method_signature'],
+            'tsx': ['method_definition', 'method_signature'],
             'go': ['method_declaration'],
             'java': ['method_declaration', 'constructor_declaration'],
             'rust': ['function_item'],  # Methods inside impl blocks
@@ -411,7 +425,9 @@ class TreeSitterParser(BaseParser):
         """Recursively traverse tree to find imports"""
         import_types = {
             'javascript': ['import_statement'],
+            'jsx': ['import_statement'],
             'typescript': ['import_statement'],
+            'tsx': ['import_statement'],
             'go': ['import_declaration'],
             'java': ['import_declaration'],
             'rust': ['use_declaration'],
@@ -432,8 +448,8 @@ class TreeSitterParser(BaseParser):
         """Extract just the module path from an import statement"""
         import re
 
-        if language in ['javascript', 'typescript']:
-            # For JS/TS: import {...} from "path" or import "path"
+        if language in ['javascript', 'jsx', 'typescript', 'tsx']:
+            # For JS/TS/JSX/TSX: import {...} from "path" or import "path"
             # Find the string node (source)
             for child in node.children:
                 if child.type == 'string':
@@ -499,7 +515,9 @@ class TreeSitterParser(BaseParser):
         # Parameter list node types by language
         param_list_types = {
             'javascript': ['formal_parameters'],
+            'jsx': ['formal_parameters'],
             'typescript': ['formal_parameters'],
+            'tsx': ['formal_parameters'],
             'go': ['parameter_list'],
             'java': ['formal_parameters'],
             'rust': ['parameters'],

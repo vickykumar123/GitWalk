@@ -322,8 +322,8 @@ class FileProcessingService:
                   content_hash=content_hash
               )
 
-              # Step 6: Update parsed data
-              if parsed_data["functions"] or parsed_data["classes"]:
+              # Step 6: Update parsed data (always save imports, even if no functions/classes)
+              if parsed_data["functions"] or parsed_data["classes"] or parsed_data["imports"]:
                   await self.file_service.update_parsed_data(
                       repo_id=repo_id,
                       path=path,
@@ -418,8 +418,8 @@ class FileProcessingService:
           try:
               print(f"\n📚 Fetching all files for dependency resolution...")
 
-              # Step 1: Fetch all files
-              files = await self.file_service.get_files_by_repo(repo_id)
+              # Step 1: Fetch all files (with content for tsconfig.json parsing)
+              files = await self.file_service.get_files_by_repo_with_content(repo_id)
 
               if not files:
                   print(f"⚠️  No files found for repo {repo_id}")

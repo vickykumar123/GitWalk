@@ -1,5 +1,7 @@
 from typing import Dict, List, Optional, Set, Tuple
 import os
+import json
+import re
 
 
 class DependencyResolver:
@@ -44,6 +46,11 @@ class DependencyResolver:
             'c': ['.c', '.h']
         }
 
+        # Parse all tsconfig.json/jsconfig.json files for path aliases and baseUrl
+        # Maps directory path to config: {"frontend": {"aliases": {"@/": "frontend/src/"}, "base_url": "frontend/src"}}
+        self.tsconfig_map = {}
+        self._parse_all_tsconfigs()
+
     def _build_indices(self):
         """Build fast lookup indices for file resolution"""
         # Index by filename (without extension)
@@ -58,6 +65,233 @@ class DependencyResolver:
             self.filename_index[base_name].append(path)
 
         print(f"📚 Indexed {len(self.file_map)} files for dependency resolution")
+
+    def _strip_json_comments(self, json_str: str) -> str:
+        """
+        Remove comments and trailing commas from JSON string.
+
+        tsconfig.json files often contain:
+        - Single-line comments: // comment
+        - Multi-line comments: /* comment */
+        - Trailing commas: {"key": "value",}
+
+        Standard JSON doesn't support these, so we strip them.
+        """
+        # Remove single-line comments (// ...)
+        # But be careful not to remove // inside strings
+        result = []
+        in_string = False
+        i = 0
+        while i < len(json_str):
+            char = json_str[i]
+
+            # Track if we're inside a string
+            if char == '"' and (i == 0 or json_str[i-1] != '\\'):
+                in_string = not in_string
+                result.append(char)
+                i += 1
+            # Check for single-line comment
+            elif not in_string and char == '/' and i + 1 < len(json_str) and json_str[i+1] == '/':
+                # Skip until end of line
+                while i < len(json_str) and json_str[i] != '\n':
+                    i += 1
+            # Check for multi-line comment
+            elif not in_string and char == '/' and i + 1 < len(json_str) and json_str[i+1] == '*':
+                i += 2  # Skip /*
+                while i + 1 < len(json_str) and not (json_str[i] == '*' and json_str[i+1] == '/'):
+                    i += 1
+                i += 2  # Skip */
+            else:
+                result.append(char)
+                i += 1
+
+        json_str = ''.join(result)
+
+        # Remove trailing commas before } or ]
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+        return json_str
+
+    def _parse_all_tsconfigs(self):
+        """
+        Find and parse ALL tsconfig.json/jsconfig.json files in the repository.
+
+        Stores parsed aliases and baseUrl keyed by the config file's directory path.
+        This allows matching files to their nearest config.
+        """
+        config_files = ['tsconfig.json', 'jsconfig.json']
+        found_configs = []
+
+        # Find all tsconfig.json and jsconfig.json files
+        for path in self.file_map.keys():
+            filename = path.split('/')[-1]
+            if filename in config_files:
+                found_configs.append(path)
+
+        if not found_configs:
+            print("⚠️ No tsconfig.json or jsconfig.json found in repository")
+            return
+
+        print(f"📋 Found {len(found_configs)} config file(s): {found_configs}")
+
+        # Parse each config file
+        for config_path in found_configs:
+            config_content = self.file_map[config_path].get('content', '')
+            if not config_content:
+                print(f"  ⚠️ No content found for {config_path} (skipping)")
+                continue
+
+            # Get the directory containing the config file
+            # e.g., "frontend/tsconfig.json" → "frontend"
+            # e.g., "tsconfig.json" → ""
+            path_parts = config_path.split('/')
+            if len(path_parts) > 1:
+                config_dir = '/'.join(path_parts[:-1])
+            else:
+                config_dir = ''
+
+            try:
+                # Strip comments and trailing commas (tsconfig allows these)
+                clean_content = self._strip_json_comments(config_content)
+                config = json.loads(clean_content)
+                compiler_options = config.get('compilerOptions', {})
+                paths = compiler_options.get('paths', {})
+                base_url = compiler_options.get('baseUrl', '')
+
+                # Build aliases for this config
+                aliases = {}
+
+                # Process baseUrl
+                # e.g., baseUrl: "." or baseUrl: "src" or baseUrl: "./src"
+                resolved_base_url = None
+                if base_url:
+                    # Clean up baseUrl
+                    clean_base_url = base_url.lstrip('./').rstrip('/')
+
+                    # Prepend config directory
+                    if config_dir:
+                        if clean_base_url:
+                            resolved_base_url = f"{config_dir}/{clean_base_url}"
+                        else:
+                            resolved_base_url = config_dir
+                    else:
+                        resolved_base_url = clean_base_url if clean_base_url else None
+
+                if paths:
+                    # Parse paths configuration
+                    # Format: { "@/*": ["./src/*"], "@components/*": ["./src/components/*"] }
+                    for alias_pattern, target_paths in paths.items():
+                        if not target_paths:
+                            continue
+
+                        # Remove trailing /* from alias (e.g., "@/*" → "@/")
+                        alias = alias_pattern.rstrip('*')
+                        if alias and not alias.endswith('/'):
+                            alias = alias + '/'
+
+                        # Get first target path and clean it
+                        target = target_paths[0] if isinstance(target_paths, list) else target_paths
+                        target = target.lstrip('./').rstrip('*')
+                        if target and not target.endswith('/'):
+                            target = target + '/'
+
+                        # Paths are relative to baseUrl if set, otherwise to config dir
+                        if resolved_base_url:
+                            full_target = f"{resolved_base_url}/{target}"
+                        elif config_dir:
+                            full_target = f"{config_dir}/{target}"
+                        else:
+                            full_target = target
+
+                        aliases[alias] = full_target
+
+                # Add default aliases if not already defined
+                if '@/' not in aliases:
+                    if resolved_base_url:
+                        aliases['@/'] = f"{resolved_base_url}/"
+                    elif config_dir:
+                        aliases['@/'] = f"{config_dir}/src/"
+                    else:
+                        aliases['@/'] = 'src/'
+
+                if '~/' not in aliases:
+                    if config_dir:
+                        aliases['~/'] = f"{config_dir}/"
+                    else:
+                        aliases['~/'] = ''
+
+                # Store config (aliases + baseUrl) keyed by config directory
+                self.tsconfig_map[config_dir] = {
+                    'aliases': aliases,
+                    'base_url': resolved_base_url
+                }
+
+                print(f"  ✅ Parsed {config_path}:")
+                if resolved_base_url:
+                    print(f"     baseUrl: '{resolved_base_url}'")
+                for alias, target in aliases.items():
+                    print(f"     '{alias}' → '{target}'")
+
+            except json.JSONDecodeError as e:
+                print(f"  ⚠️ Failed to parse {config_path}: {e}")
+            except Exception as e:
+                print(f"  ⚠️ Error parsing {config_path}: {e}")
+
+        print(f"✅ Loaded path aliases from {len(self.tsconfig_map)} config(s)")
+
+    def _get_config_for_file(self, file_path: str) -> Dict:
+        """
+        Get the tsconfig configuration that applies to a specific file.
+
+        Finds the nearest tsconfig.json by walking up the directory tree
+        from the file's location.
+
+        Args:
+            file_path: Path of the file being processed
+
+        Returns:
+            Config dict with 'aliases' and 'base_url' keys
+        """
+        default_config = {
+            'aliases': {'@/': 'src/', '~/': ''},
+            'base_url': None
+        }
+
+        if not self.tsconfig_map:
+            # No configs found, return default
+            return default_config
+
+        # Get directory of the file
+        path_parts = file_path.split('/')
+        if len(path_parts) > 1:
+            file_dir = '/'.join(path_parts[:-1])
+        else:
+            file_dir = ''
+
+        # Walk up the directory tree to find nearest config
+        # e.g., for "frontend/src/components/Button.tsx"
+        # check: "frontend/src/components" → not found
+        # check: "frontend/src" → not found
+        # check: "frontend" → found!
+        current_dir = file_dir
+        while True:
+            if current_dir in self.tsconfig_map:
+                return self.tsconfig_map[current_dir]
+
+            # Move up one directory
+            if '/' in current_dir:
+                current_dir = '/'.join(current_dir.split('/')[:-1])
+            elif current_dir:
+                # Last level before root
+                current_dir = ''
+            else:
+                # Reached root, check for root config
+                if '' in self.tsconfig_map:
+                    return self.tsconfig_map['']
+                break
+
+        # No config found, return default
+        return default_config
 
     def resolve_all_dependencies(self) -> Dict[str, Dict]:
         """
@@ -136,9 +370,9 @@ class DependencyResolver:
         if import_statement.startswith('.'):
             # Relative import: ./parser, ../config/server
             return self._resolve_relative(import_statement, current_file_path, language)
-        elif import_statement.startswith('@/') or import_statement.startswith('~/'):
-            # Alias import: @/utils/helper, ~/components/Button
-            return self._resolve_alias(import_statement, language)
+        elif import_statement.startswith('@/') or import_statement.startswith('~/') or import_statement.startswith('@'):
+            # Alias import: @/utils/helper, ~/components/Button, @components/Button
+            return self._resolve_alias(import_statement, current_file_path, language)
         else:
             # Absolute import: app/parser, src/utils/helper
             return self._resolve_absolute(import_statement, current_file_path, language)
@@ -168,8 +402,14 @@ class DependencyResolver:
             if base_package in node_builtins:
                 return True
 
-            # If doesn't start with . or / or @/, likely external
-            if not import_path.startswith('.') and not import_path.startswith('/') and not import_path.startswith('@/'):
+            # Check if it's an alias import (starts with @/ or ~/)
+            # These are internal, not external
+            if import_path.startswith('@/') or import_path.startswith('~/'):
+                return False
+
+            # If doesn't start with . or / likely external npm package
+            # But @ without / (like @radix-ui/react) is external
+            if not import_path.startswith('.') and not import_path.startswith('/'):
                 return True
 
         elif language == 'python':
@@ -251,33 +491,48 @@ class DependencyResolver:
         Resolve absolute import (app/parser, src/utils/helper).
 
         For Python, also handles package imports (app.parser → app/parser.py).
+        For JS/TS, uses baseUrl from tsconfig.json if available.
         """
         # For Python, convert dots to slashes
         if language == 'python':
             import_path = import_path.replace('.', '/')
 
-        # Try direct match
+        # For JS/TS, try resolving with baseUrl first
+        if language in ['javascript', 'typescript']:
+            config = self._get_config_for_file(current_file)
+            base_url = config.get('base_url')
+
+            if base_url:
+                # Try resolving relative to baseUrl
+                # e.g., baseUrl="frontend/src", import="utils/helper" → "frontend/src/utils/helper"
+                base_resolved = f"{base_url}/{import_path}"
+                result = self._find_file_with_extension(base_resolved, language)
+                if result:
+                    return result
+
+        # Try direct match (without baseUrl)
         return self._find_file_with_extension(import_path, language)
 
-    def _resolve_alias(self, import_path: str, language: str) -> Optional[str]:
+    def _resolve_alias(self, import_path: str, current_file_path: str, language: str) -> Optional[str]:
         """
-        Resolve alias imports (@/ → src/, ~/ → root).
+        Resolve alias imports using the nearest tsconfig.json configuration.
 
         Args:
-            import_path: Aliased import path
+            import_path: Aliased import path (e.g., "@/components/Button")
+            current_file_path: Path of file containing the import
             language: Programming language
 
         Returns:
             Resolved path or None
         """
-        # Common alias mappings
-        aliases = {
-            '@/': 'src/',
-            '~/': '',
-            '@': 'src'
-        }
+        # Get config for the current file (finds nearest tsconfig.json)
+        config = self._get_config_for_file(current_file_path)
+        aliases = config.get('aliases', {})
 
-        for alias, replacement in aliases.items():
+        # Sort aliases by length (longest first) to match most specific alias
+        sorted_aliases = sorted(aliases.items(), key=lambda x: len(x[0]), reverse=True)
+
+        for alias, replacement in sorted_aliases:
             if import_path.startswith(alias):
                 resolved = import_path.replace(alias, replacement, 1)
                 return self._find_file_with_extension(resolved, language)
