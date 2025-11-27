@@ -20,6 +20,7 @@ from app.services.conversation_service import ConversationService
 from app.services.message_service import MessageService
 from app.config.providers import ProviderConfig
 from app.config.settings import settings
+from app.config.model_config import get_default_model
 
 
 class QueryService:
@@ -65,7 +66,7 @@ class QueryService:
         )
 
         # Model: parameter > settings > provider default
-        self.model = model or settings.ai_model or self._get_default_model(self.provider)
+        self.model = model or settings.ai_model or get_default_model(self.provider)
 
         print(f"✅ Query Service initialized: {self.provider} ({self.model})")
 
@@ -73,16 +74,6 @@ class QueryService:
         self.vector_search = VectorSearchService(api_key)
         self.conversation_service = ConversationService()
         self.message_service = MessageService()
-
-    def _get_default_model(self, provider: str) -> str:
-        """Get default model for query/chat"""
-        defaults = {
-            "openai": "gpt-4o",  # Best reasoning
-            "gemini": "gemini-1.5-pro",  # Best Gemini
-            "together": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",  # 131K context
-            "fireworks": "accounts/fireworks/models/llama-v3p1-70b-instruct"  # 131K context
-        }
-        return defaults.get(provider, "gpt-4o")
 
     def _strip_think_tags(self, text: str) -> str:
         """

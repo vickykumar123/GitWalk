@@ -16,6 +16,7 @@ from openai import AsyncOpenAI
 
 from app.config.providers import ProviderConfig
 from app.config.settings import settings
+from app.config.model_config import get_default_model
 from app.services.file_service import FileService
 from app.services.embedding_service import EmbeddingService
 from app.utils.text_utils import strip_thinking_content
@@ -56,7 +57,7 @@ class AIService:
         )
 
         # Model: parameter > settings > provider default
-        self.model = model or settings.ai_model or self._get_default_model(self.provider)
+        self.model = model or settings.ai_model or get_default_model(self.provider)
 
         print(f"✅ AI Service initialized: {self.provider} ({self.model})")
 
@@ -64,16 +65,6 @@ class AIService:
         self.file_service = FileService()
         # Don't initialize EmbeddingService here - it's created separately in file_processing_service
         # self.embedding_service = EmbeddingService()
-
-    def _get_default_model(self, provider: str) -> str:
-        """Get default model for summary generation"""
-        defaults = {
-            "openai": "gpt-4o-mini",  # Fast and cheap
-            "gemini": "gemini-1.5-flash",  # Fast Gemini model
-            "together": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",  # 131K context, best balance
-            "fireworks": "accounts/fireworks/models/llama-v3p1-70b-instruct"  # 131K context
-        }
-        return defaults.get(provider, "gpt-4o-mini")
 
     async def generate_summaries_for_repository(self, repo_id: str):
         """
