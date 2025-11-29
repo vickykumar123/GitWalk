@@ -89,29 +89,34 @@ export default function DependencyGraph({
 
     // Create gradients for each language
     Object.entries(LANGUAGE_COLORS).forEach(([lang, colors]) => {
-      const gradient = defs.append("radialGradient")
+      const gradient = defs
+        .append("radialGradient")
         .attr("id", `gradient-${lang}`)
         .attr("cx", "30%")
         .attr("cy", "30%");
 
-      gradient.append("stop")
+      gradient
+        .append("stop")
         .attr("offset", "0%")
         .attr("stop-color", colors.secondary);
 
-      gradient.append("stop")
+      gradient
+        .append("stop")
         .attr("offset", "100%")
         .attr("stop-color", colors.primary);
     });
 
     // Glow filter for hover/selected states
-    const glowFilter = defs.append("filter")
+    const glowFilter = defs
+      .append("filter")
       .attr("id", "glow")
       .attr("x", "-50%")
       .attr("y", "-50%")
       .attr("width", "200%")
       .attr("height", "200%");
 
-    glowFilter.append("feGaussianBlur")
+    glowFilter
+      .append("feGaussianBlur")
       .attr("stdDeviation", "4")
       .attr("result", "coloredBlur");
 
@@ -120,21 +125,24 @@ export default function DependencyGraph({
     glowMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
     // Drop shadow filter
-    const shadowFilter = defs.append("filter")
+    const shadowFilter = defs
+      .append("filter")
       .attr("id", "shadow")
       .attr("x", "-50%")
       .attr("y", "-50%")
       .attr("width", "200%")
       .attr("height", "200%");
 
-    shadowFilter.append("feDropShadow")
+    shadowFilter
+      .append("feDropShadow")
       .attr("dx", "0")
       .attr("dy", "2")
       .attr("stdDeviation", "3")
       .attr("flood-color", "rgba(0,0,0,0.3)");
 
     // Arrow marker with gradient
-    const marker = defs.append("marker")
+    const marker = defs
+      .append("marker")
       .attr("id", "arrowhead")
       .attr("viewBox", "-0 -5 10 10")
       .attr("refX", 32)
@@ -143,13 +151,15 @@ export default function DependencyGraph({
       .attr("markerWidth", 6)
       .attr("markerHeight", 6);
 
-    marker.append("path")
+    marker
+      .append("path")
       .attr("d", "M 0,-4 L 8,0 L 0,4")
       .attr("fill", "#6366f1")
       .attr("opacity", 0.8);
 
     // Highlighted arrow marker
-    const markerHighlight = defs.append("marker")
+    const markerHighlight = defs
+      .append("marker")
       .attr("id", "arrowhead-highlight")
       .attr("viewBox", "-0 -5 10 10")
       .attr("refX", 32)
@@ -158,7 +168,8 @@ export default function DependencyGraph({
       .attr("markerWidth", 8)
       .attr("markerHeight", 8);
 
-    markerHighlight.append("path")
+    markerHighlight
+      .append("path")
       .attr("d", "M 0,-4 L 8,0 L 0,4")
       .attr("fill", "#a855f7");
 
@@ -166,7 +177,8 @@ export default function DependencyGraph({
     const g = svg.append("g");
 
     // Add zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .on("zoom", (event) => {
         g.attr("transform", event.transform);
@@ -194,22 +206,28 @@ export default function DependencyGraph({
     const chargeStrength = Math.min(-80, -150 - density * 20);
 
     // Create force simulation with improved spacing
-    const simulation = d3.forceSimulation(simulationNodes)
-      .force("link", d3.forceLink<SimulationNode, SimulationEdge>(simulationEdges)
-        .id((d) => d.id)
-        .distance(linkDistance)
-        .strength(0.8)
+    const simulation = d3
+      .forceSimulation(simulationNodes)
+      .force(
+        "link",
+        d3
+          .forceLink<SimulationNode, SimulationEdge>(simulationEdges)
+          .id((d) => d.id)
+          .distance(linkDistance)
+          .strength(0.8)
       )
-      .force("charge", d3.forceManyBody()
-        .strength((d) => {
+      .force(
+        "charge",
+        d3.forceManyBody().strength((d) => {
           // Nodes with more connections need more space
           const node = d as SimulationNode;
           return chargeStrength - (node.connectionCount || 0) * 15;
         })
       )
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide()
-        .radius((d) => {
+      .force(
+        "collision",
+        d3.forceCollide().radius((d) => {
           const node = d as SimulationNode;
           return 45 + (node.connectionCount || 0) * 3;
         })
@@ -218,7 +236,8 @@ export default function DependencyGraph({
       .force("y", d3.forceY(height / 2).strength(0.03));
 
     // Draw curved edges
-    const link = g.append("g")
+    const link = g
+      .append("g")
       .attr("class", "links")
       .selectAll("path")
       .data(simulationEdges)
@@ -230,31 +249,35 @@ export default function DependencyGraph({
       .attr("marker-end", "url(#arrowhead)");
 
     // Draw nodes
-    const node = g.append("g")
+    const node = g
+      .append("g")
       .attr("class", "nodes")
       .selectAll<SVGGElement, SimulationNode>("g")
       .data(simulationNodes)
       .join("g")
       .attr("cursor", "pointer")
-      .call(d3.drag<SVGGElement, SimulationNode>()
-        .on("start", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
-        })
-        .on("drag", (event, d) => {
-          d.fx = event.x;
-          d.fy = event.y;
-        })
-        .on("end", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
-        })
+      .call(
+        d3
+          .drag<SVGGElement, SimulationNode>()
+          .on("start", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on("drag", (event, d) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on("end", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          })
       );
 
     // Outer glow ring for nodes with external dependencies
-    node.filter((d) => d.has_external_dependencies)
+    node
+      .filter((d) => d.has_external_dependencies)
       .append("circle")
       .attr("r", 24)
       .attr("fill", "none")
@@ -265,19 +288,23 @@ export default function DependencyGraph({
       .attr("class", "pulse-ring");
 
     // Node circles with gradients
-    node.append("circle")
-      .attr("r", (d) => d.has_external_dependencies ? 18 : 14)
+    node
+      .append("circle")
+      .attr("r", (d) => (d.has_external_dependencies ? 18 : 14))
       .attr("fill", (d) => {
         const lang = d.language?.toLowerCase() || "default";
         return `url(#gradient-${LANGUAGE_COLORS[lang] ? lang : "default"})`;
       })
-      .attr("stroke", (d) => d.id === selectedNodeId ? "#fff" : "rgba(255,255,255,0.2)")
-      .attr("stroke-width", (d) => d.id === selectedNodeId ? 3 : 1)
+      .attr("stroke", (d) =>
+        d.id === selectedNodeId ? "#fff" : "rgba(255,255,255,0.2)"
+      )
+      .attr("stroke-width", (d) => (d.id === selectedNodeId ? 3 : 1))
       .attr("filter", "url(#shadow)")
       .attr("class", "node-circle");
 
     // Inner highlight for 3D effect
-    node.append("circle")
+    node
+      .append("circle")
       .attr("r", (d) => (d.has_external_dependencies ? 18 : 14) * 0.4)
       .attr("cx", -3)
       .attr("cy", -3)
@@ -285,11 +312,11 @@ export default function DependencyGraph({
       .attr("pointer-events", "none");
 
     // Node labels with background
-    const labelGroup = node.append("g")
-      .attr("transform", "translate(22, 0)");
+    const labelGroup = node.append("g").attr("transform", "translate(22, 0)");
 
-    // Label background
-    labelGroup.append("rect")
+    // Label background (will be sized after text is added)
+    labelGroup
+      .append("rect")
       .attr("x", -4)
       .attr("y", -10)
       .attr("rx", 4)
@@ -297,22 +324,24 @@ export default function DependencyGraph({
       .attr("fill", "rgba(17, 24, 39, 0.8)")
       .attr("class", "label-bg");
 
-    // Label text
-    const labelText = labelGroup.append("text")
+    // Add text labels
+    labelGroup
+      .append("text")
       .text((d) => d.filename)
-      .attr("y", 4)
       .attr("font-size", "11px")
-      .attr("font-weight", "500")
       .attr("fill", "#e5e7eb")
-      .attr("pointer-events", "none");
+      .attr("dominant-baseline", "middle");
 
     // Size label backgrounds to fit text
-    labelGroup.each(function() {
+    labelGroup.each(function () {
       const textNode = d3.select(this).select("text").node() as SVGTextElement;
-      const bbox = textNode.getBBox();
-      d3.select(this).select("rect")
-        .attr("width", bbox.width + 8)
-        .attr("height", bbox.height + 6);
+      if (textNode) {
+        const bbox = textNode.getBBox();
+        d3.select(this)
+          .select("rect")
+          .attr("width", bbox.width + 8)
+          .attr("height", bbox.height + 6);
+      }
     });
 
     // Node interactions
@@ -337,35 +366,51 @@ export default function DependencyGraph({
           .transition()
           .duration(200)
           .attr("stroke-opacity", (l) => {
-            const source = typeof l.source === "object" ? l.source.id : l.source;
-            const target = typeof l.target === "object" ? l.target.id : l.target;
+            const source =
+              typeof l.source === "object" ? l.source.id : l.source;
+            const target =
+              typeof l.target === "object" ? l.target.id : l.target;
             return source === d.id || target === d.id ? 0.9 : 0.1;
           })
           .attr("stroke", (l) => {
-            const source = typeof l.source === "object" ? l.source.id : l.source;
-            const target = typeof l.target === "object" ? l.target.id : l.target;
+            const source =
+              typeof l.source === "object" ? l.source.id : l.source;
+            const target =
+              typeof l.target === "object" ? l.target.id : l.target;
             return source === d.id || target === d.id ? "#a855f7" : "#6366f1";
           })
           .attr("stroke-width", (l) => {
-            const source = typeof l.source === "object" ? l.source.id : l.source;
-            const target = typeof l.target === "object" ? l.target.id : l.target;
+            const source =
+              typeof l.source === "object" ? l.source.id : l.source;
+            const target =
+              typeof l.target === "object" ? l.target.id : l.target;
             return source === d.id || target === d.id ? 3 : 2;
           })
           .attr("marker-end", (l) => {
-            const source = typeof l.source === "object" ? l.source.id : l.source;
-            const target = typeof l.target === "object" ? l.target.id : l.target;
-            return source === d.id || target === d.id ? "url(#arrowhead-highlight)" : "url(#arrowhead)";
+            const source =
+              typeof l.source === "object" ? l.source.id : l.source;
+            const target =
+              typeof l.target === "object" ? l.target.id : l.target;
+            return source === d.id || target === d.id
+              ? "url(#arrowhead-highlight)"
+              : "url(#arrowhead)";
           });
 
         // Dim non-connected nodes
-        node.transition()
+        node
+          .transition()
           .duration(200)
           .attr("opacity", (n) => {
             if (n.id === d.id) return 1;
             const isConnected = simulationEdges.some((e) => {
-              const source = typeof e.source === "object" ? e.source.id : e.source;
-              const target = typeof e.target === "object" ? e.target.id : e.target;
-              return (source === d.id && target === n.id) || (target === d.id && source === n.id);
+              const source =
+                typeof e.source === "object" ? e.source.id : e.source;
+              const target =
+                typeof e.target === "object" ? e.target.id : e.target;
+              return (
+                (source === d.id && target === n.id) ||
+                (target === d.id && source === n.id)
+              );
             });
             return isConnected ? 1 : 0.3;
           });
@@ -391,9 +436,7 @@ export default function DependencyGraph({
           .attr("marker-end", "url(#arrowhead)");
 
         // Reset node opacity
-        node.transition()
-          .duration(200)
-          .attr("opacity", 1);
+        node.transition().duration(200).attr("opacity", 1);
       });
 
     // Curved path generator
@@ -413,15 +456,13 @@ export default function DependencyGraph({
     });
 
     // Initial zoom to fit
-    const initialScale = Math.min(
-      width / 1200,
-      height / 900,
-      0.9
-    );
-    svg.call(zoom.transform, d3.zoomIdentity
-      .translate(width / 2, height / 2)
-      .scale(initialScale)
-      .translate(-width / 2, -height / 2)
+    const initialScale = Math.min(width / 1200, height / 900, 0.9);
+    svg.call(
+      zoom.transform,
+      d3.zoomIdentity
+        .translate(width / 2, height / 2)
+        .scale(initialScale)
+        .translate(-width / 2, -height / 2)
     );
 
     return () => {
@@ -430,15 +471,30 @@ export default function DependencyGraph({
   }, [nodes, edges, dimensions, selectedNodeId, onNodeClick]);
 
   // Find hovered node data for tooltip
-  const hoveredNodeData = hoveredNode ? nodes.find((n) => n.id === hoveredNode) : null;
+  const hoveredNodeData = hoveredNode
+    ? nodes.find((n) => n.id === hoveredNode)
+    : null;
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-gradient-to-br from-[#0f0f1a] to-[#1a1a2e]">
+    <div
+      ref={containerRef}
+      className="relative w-full h-full bg-gradient-to-br from-[#0f0f1a] to-[#1a1a2e]"
+    >
       {/* Decorative background pattern */}
       <div className="absolute inset-0 opacity-5 pointer-events-none">
         <svg width="100%" height="100%">
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="0.5" />
+          <pattern
+            id="grid"
+            width="40"
+            height="40"
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d="M 40 0 L 0 0 0 40"
+              fill="none"
+              stroke="white"
+              strokeWidth="0.5"
+            />
           </pattern>
           <rect width="100%" height="100%" fill="url(#grid)" />
         </svg>
@@ -473,9 +529,13 @@ export default function DependencyGraph({
               className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
               style={{
                 background: `linear-gradient(135deg, ${
-                  LANGUAGE_COLORS[hoveredNodeData.language?.toLowerCase() || "default"]?.secondary
+                  LANGUAGE_COLORS[
+                    hoveredNodeData.language?.toLowerCase() || "default"
+                  ]?.secondary
                 }, ${
-                  LANGUAGE_COLORS[hoveredNodeData.language?.toLowerCase() || "default"]?.primary
+                  LANGUAGE_COLORS[
+                    hoveredNodeData.language?.toLowerCase() || "default"
+                  ]?.primary
                 })`,
               }}
             >
@@ -484,8 +544,12 @@ export default function DependencyGraph({
               </span>
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-sm font-semibold text-white truncate">{hoveredNodeData.filename}</p>
-              <p className="text-xs text-gray-400 truncate">{hoveredNodeData.path}</p>
+              <p className="font-mono text-sm font-semibold text-white truncate">
+                {hoveredNodeData.filename}
+              </p>
+              <p className="text-xs text-gray-400 truncate">
+                {hoveredNodeData.path}
+              </p>
             </div>
           </div>
 
@@ -507,10 +571,20 @@ export default function DependencyGraph({
 
           {hoveredNodeData.has_external_dependencies && (
             <div className="flex items-center gap-2 mt-3 px-2 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-              <svg className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              <svg
+                className="w-4 h-4 text-yellow-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
               </svg>
-              <span className="text-xs text-yellow-300">Has external dependencies</span>
+              <span className="text-xs text-yellow-300">
+                Has external dependencies
+              </span>
             </div>
           )}
         </div>
@@ -518,17 +592,24 @@ export default function DependencyGraph({
 
       {/* Enhanced Legend */}
       <div className="absolute bottom-4 right-4 bg-gradient-to-br from-[#1e1e2e] to-[#2a2a3e] border border-purple-500/20 rounded-xl p-4 backdrop-blur-sm">
-        <p className="text-xs font-semibold mb-3 text-purple-300 uppercase tracking-wider">Languages</p>
+        <p className="text-xs font-semibold mb-3 text-purple-300 uppercase tracking-wider">
+          Languages
+        </p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-          {Object.entries(LANGUAGE_COLORS).slice(0, 8).filter(([lang]) => lang !== "default").map(([lang, colors]) => (
-            <div key={lang} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full shadow-lg"
-                style={{background: `linear-gradient(135deg, ${colors.secondary}, ${colors.primary})`}}
-              />
-              <span className="text-xs text-gray-300 capitalize">{lang}</span>
-            </div>
-          ))}
+          {Object.entries(LANGUAGE_COLORS)
+            .slice(0, 8)
+            .filter(([lang]) => lang !== "default")
+            .map(([lang, colors]) => (
+              <div key={lang} className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full shadow-lg"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.secondary}, ${colors.primary})`,
+                  }}
+                />
+                <span className="text-xs text-gray-300 capitalize">{lang}</span>
+              </div>
+            ))}
         </div>
         <div className="mt-3 pt-3 border-t border-purple-500/20">
           <div className="flex items-center gap-2">
@@ -541,7 +622,9 @@ export default function DependencyGraph({
       {/* Controls hint */}
       <div className="absolute bottom-4 left-4 px-3 py-2 rounded-lg bg-[#1e1e2e]/80 border border-purple-500/10 backdrop-blur-sm">
         <p className="text-xs text-gray-400">
-          <span className="text-purple-400">Scroll</span> to zoom • <span className="text-purple-400">Drag</span> to pan • <span className="text-purple-400">Click</span> node to view
+          <span className="text-purple-400">Scroll</span> to zoom •{" "}
+          <span className="text-purple-400">Drag</span> to pan •{" "}
+          <span className="text-purple-400">Click</span> node to view
         </p>
       </div>
     </div>

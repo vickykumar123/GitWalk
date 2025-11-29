@@ -30,10 +30,10 @@ class SessionPreferences(BaseModel):
     ai_provider: str = Field(..., description="AI provider: openai, together, groq, grok, openrouter")
     ai_model: str = Field(..., description="AI model name: gpt-4o-mini, llama-3.1-70b, etc.")
 
-    # Embedding Settings (OPTIONAL - defaults to CodeBERT if null)
+    # Embedding Settings (uses same provider as AI chat)
     embedding_provider: Optional[str] = Field(
         None,
-        description="Embedding provider: openai (768 dims) or null (CodeBERT 768 dims)"
+        description="Embedding provider: uses same provider as ai_provider"
     )
     embedding_model: Optional[str] = Field(
         None,
@@ -101,7 +101,7 @@ class SessionUpdatePreferences(BaseModel):
             "example": {
                 "ai_provider": "openai",
                 "ai_model": "gpt-4o-mini",
-                "embedding_provider": None,  # Use CodeBERT
+                "embedding_provider": None,  # Uses same as ai_provider
                 "theme": "dark"
             }
         }

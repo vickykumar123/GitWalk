@@ -14,7 +14,7 @@ and provides an AI-powered conversational interface for exploring codebases.
 | **Database**      | MongoDB Atlas                                      | Document store with vector search capabilities  |
 | **AI Provider**   | Multi-provider (OpenAI, Fireworks, Together, Groq) | LLM for code analysis                           |
 | and chat          |
-| **Embeddings**    | CodeBERT (768-dim)                                 | Semantic code search                            |
+| **Embeddings**    | Provider API (768-dim)                             | Semantic code search                            |
 | **Parser**        | tree-sitter + AST                                  | Multi-language code parsing (8+ languages)      |
 | **Vector Search** | MongoDB Atlas Search                               | Hybrid search (semantic + keyword)              |
 
@@ -71,7 +71,7 @@ and provides an AI-powered conversational interface for exploring codebases.
 
 ### 5. **EmbeddingService**
 
-- CodeBERT embeddings (768 dimensions)
+- Provider API embeddings (768 dimensions for OpenAI, varies by provider)
 - Dual embedding strategy:
   - **Code embeddings**: Function/class level
   - **Summary embeddings**: File level
@@ -432,7 +432,7 @@ Background Task Starts:
   ↓
   9. Run parallel analysis:
      ├─ Resolve dependencies
-     ├─ Generate embeddings (CodeBERT)
+     ├─ Generate embeddings (Provider API)
      └─ Generate AI summaries (using session provider)
   ↓
   10. Post-processing:
@@ -485,7 +485,7 @@ User → POST /api/query/
 
 search_code("How does RDB parser work?")
   ↓
-  1. Generate query embedding (CodeBERT)
+  1. Generate query embedding (Provider API)
   ↓
   2. Parallel vector searches:
      │

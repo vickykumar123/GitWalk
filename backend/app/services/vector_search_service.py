@@ -64,7 +64,6 @@ class VectorSearchService:
             print(f"\n🔍 search_code (unified): '{query}'")
 
             # Generate embedding for query
-            await self.embedding_service._load_model()
             query_embedding = await self.embedding_service._encode_text(query)
             query_embedding = list(query_embedding) if query_embedding else []
 
@@ -181,7 +180,6 @@ class VectorSearchService:
             print(f"\n📄 search_files: '{query}' (top_k={top_k})")
 
             # Generate embedding for query
-            await self.embedding_service._load_model()
             query_embedding = await self.embedding_service._encode_text(query)
             query_embedding = list(query_embedding) if query_embedding else []
 

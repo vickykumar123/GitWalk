@@ -98,7 +98,6 @@ class FileProcessingService:
             print(f"✅ After AI Service init, api_key is: {api_key_check}", flush=True)
 
             print(f"🔧 Initializing Embedding Service with api_key={'present' if api_key else 'None'}", flush=True)
-            print(f"🔧 USE_CODEBERT setting: {settings.use_codebert}", flush=True)
             embedding_service = EmbeddingService(api_key=api_key)
 
             # step 1: Get repository document
@@ -461,7 +460,7 @@ class FileProcessingService:
           """
           Generate embeddings for all parsed files in repository.
 
-          Uses CodeBERT or provider embeddings to create 768-dim embeddings for:
+          Uses provider API (OpenAI, Gemini, etc.) to create 768-dim embeddings for:
           - Functions (code + signature)
           - Classes (name + methods)
           - File summaries (if available)

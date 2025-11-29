@@ -13,14 +13,12 @@ class Settings(BaseSettings):
     port: int = 9999
     debug: bool = True
     env: str = "development"
+    frontend_url: str = "http://localhost:5173"  # For CORS
 
     # AI Configuration (for automatic summary generation)
     ai_api_key: Optional[str] = None
     ai_provider: str = "openai"
     ai_model: str = "gpt-4o-mini"
-
-    # Embedding Configuration
-    use_codebert: bool = False  # False = use provider embeddings (prod), True = use local CodeBERT (dev)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False)
 
