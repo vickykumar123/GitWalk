@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     env: str = "development"
     frontend_url: str = "http://localhost:5173"  # For CORS
 
+    # GitHub Token (for higher rate limits - 5000/hour vs 60/hour)
+    github_token: Optional[str] = None
+
     # AI Configuration (for automatic summary generation)
     ai_api_key: Optional[str] = None
     ai_provider: str = "openai"

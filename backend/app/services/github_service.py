@@ -2,10 +2,23 @@ import re
 import httpx
 from typing import Tuple, Dict, Optional
 
+from app.config.settings import settings
+
+
 class GitHubService:
       """Service for interacting with GitHub API."""
 
       BASE_URL = "https://api.github.com"
+
+      def _get_headers(self) -> Dict[str, str]:
+          """Get headers for GitHub API requests."""
+          headers = {
+              "Accept": "application/vnd.github.v3+json",
+              "X-GitHub-Api-Version": "2022-11-28"
+          }
+          if settings.github_token:
+              headers["Authorization"] = f"Bearer {settings.github_token}"
+          return headers
 
       def parse_github_url(self, github_url: str) -> Tuple[str, str]:
           """
@@ -53,7 +66,7 @@ class GitHubService:
           url = f"{self.BASE_URL}/repos/{owner}/{repo_name}"
 
           async with httpx.AsyncClient() as client:
-              response = await client.get(url)
+              response = await client.get(url, headers=self._get_headers())
               response.raise_for_status()  # Raise error if 4xx or 5xx
               data = response.json()
 
@@ -89,14 +102,15 @@ class GitHubService:
               httpx.HTTPError: If API request fails
           """
           url = f"{self.BASE_URL}/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1"
+          headers = self._get_headers()
 
           async with httpx.AsyncClient() as client:
-              response = await client.get(url)
+              response = await client.get(url, headers=headers)
 
               # If "main" branch fails, try "master"
               if response.status_code == 404 and branch == "main":
                   url = f"{self.BASE_URL}/repos/{owner}/{repo_name}/git/trees/master?recursive=1"
-                  response = await client.get(url)
+                  response = await client.get(url, headers=headers)
 
               response.raise_for_status()
               data = response.json()
